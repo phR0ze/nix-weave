@@ -46,11 +46,6 @@ let
           description = "Whether this entry should be installed.";
         };
 
-        target = lib.mkOption {
-          type = str;
-          description = "Absolute destination path. Defaults to the prefix + attribute name.";
-        };
-
         user = lib.mkOption {
           type = ownerRefType;
           default = user;
@@ -138,6 +133,12 @@ let
         };
 
         # -- internal, computed --
+        _target = lib.mkOption {
+          type = str;
+          internal = true;
+          description = "Absolute destination path: prefix + attribute name. Not settable directly.";
+        };
+
         source = lib.mkOption {
           type = nullOr path;
           internal = true;
@@ -164,7 +165,7 @@ let
       };
 
       config = {
-        target = lib.mkDefault "${prefix}${name}";
+        _target = "${prefix}${name}";
 
         _engine =
           if options.encrypted.sopsFile.isDefined then "encrypted"

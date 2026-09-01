@@ -2,8 +2,7 @@
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  files.root."newt-secret" = {
-    target = "/etc/newt/client-secret";
+  files.any."etc/newt/client-secret" = {
     encrypted = { sopsFile = ./secrets.enc.yaml; key = "newt/clientSecret"; };
     filemode = "0400";
   };

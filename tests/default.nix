@@ -39,35 +39,30 @@ pkgs.testers.runNixOSTest {
     files.user.".config/menus".link = ../examples/include/xfce-menus;
 
     # -- plaintext: single file force-copied on every switch --
-    files.root."svc-data-copy" = {
-      target = "/opt/svc/data-copy";
+    files.any."opt/svc/data-copy" = {
       copy = ../examples/include/svc/data;
     };
 
     # -- encrypted: single file, decrypted straight to target by sops-nix --
-    files.root."newt-secret" = {
-      target = "/etc/newt/client-secret";
+    files.any."etc/newt/client-secret" = {
       encrypted = { sopsFile = ./fixtures/secrets.enc.yaml; key = "newt/clientSecret"; };
       filemode = "0400";
     };
 
     # -- encrypted: directory fanned out into one sops.secrets entry per leaf --
-    files.root."nginx-certs" = {
-      target = "/etc/nginx/certs";
+    files.any."etc/nginx/certs" = {
       encryptedDir = { sopsFile = ./fixtures/certs.enc.yaml; prefix = "nginx/certs"; };
       filemode = "0400";
     };
 
     # -- owner resolved from a decrypted secret, never appearing in cleartext config --
-    files.root."svc-file" = {
-      target = "/opt/svc/data";
+    files.any."opt/svc/data" = {
       copy = ../examples/include/svc/data;
       user = { secretRef = "provisioned/svcUser"; sopsFile = ./fixtures/secrets.enc.yaml; };
     };
 
     # -- templated file: mixed plaintext + sops placeholder --
-    files.templates."caddy-env" = {
-      target = "/run/caddy/cloudflare.env";
+    files.templates."run/caddy/cloudflare.env" = {
       user = "caddy";
       group = "caddy";
       filemode = "0400";

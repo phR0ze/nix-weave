@@ -3,8 +3,7 @@
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  files.root."svc-file" = {
-    target = "/opt/svc/data";
+  files.any."opt/svc/data" = {
     copy = ./include/svc/data;
     user = { secretRef = "provisioned/svcUser"; sopsFile = ./secrets.enc.yaml; };
   };

@@ -15,7 +15,7 @@ let
   ownerLiteral = entry: field: ownerRef:
     if builtins.isString ownerRef
     then ownerRef
-    else "@secret:/run/secrets/_files-owner/${filesLib.ownerSecretId entry.target}/${field}";
+    else "@secret:/run/secrets/_files-owner/${filesLib.ownerSecretId entry._target}/${field}";
 
   filesPackage = pkgs.runCommandLocal "files" { } ''
     set -euo pipefail
@@ -54,7 +54,7 @@ let
       (entry: lib.escapeShellArgs [
         "track"
         "${entry.source}"
-        (lib.removePrefix "/" entry.target)
+        (lib.removePrefix "/" entry._target)
         entry._kind
         entry.dirmode
         entry.filemode

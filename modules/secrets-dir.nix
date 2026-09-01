@@ -28,11 +28,11 @@ let
     in
     map
       (key: {
-        name = "${lib.removePrefix "/" entry.target}/${relpath entry key}";
+        name = "${lib.removePrefix "/" entry._target}/${relpath entry key}";
         value = {
           sopsFile = entry.encryptedDir.sopsFile;
           inherit key;
-          path = "${entry.target}/${relpath entry key}";
+          path = "${entry._target}/${relpath entry key}";
           owner = ownerStr entry.user;
           group = ownerStr entry.group;
           mode = entry.filemode;

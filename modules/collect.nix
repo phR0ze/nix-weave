@@ -3,7 +3,7 @@
 # files.any/files.root entries are absolute-path, single-instance as declared. files.user/
 # files.all entries are home-relative and get expanded here into one instance per real user
 # (every config.users.users entry with isNormalUser = true); files.all additionally gets one
-# root-owned /root/<target> instance. This is the one place that knows about the "real users"
+# root-owned /root/<name> instance. This is the one place that knows about the "real users"
 # concept -- nixos-files itself has no notion of a single "primary" user.
 #---------------------------------------------------------------------------------------------------
 { lib }:
@@ -14,16 +14,16 @@ let
   realUsers = lib.filterAttrs (_: u: u.isNormalUser) config.users.users;
 
   checkRelative = entry:
-    if lib.hasPrefix "/" entry.target then
-      throw "files.user/files.all target \"${entry.target}\" must be relative to a user's home directory (no leading /) -- use files.any/files.root for absolute paths"
+    if lib.hasPrefix "/" entry._target then
+      throw "files.user/files.all name \"${entry._target}\" must be relative to a user's home directory (no leading /) -- use files.any/files.root for absolute paths"
     else entry;
 
-  # One instance of `entry` per real user, target rewritten to that user's home directory.
+  # One instance of `entry` per real user, _target rewritten to that user's home directory.
   expandPerUser = attrs: lib.concatMap
     (entry:
       let e = checkRelative entry; in
       lib.mapAttrsToList
-        (uname: u: e // { target = "${u.home}/${e.target}"; user = uname; group = u.group; })
+        (uname: u: e // { _target = "${u.home}/${e._target}"; user = uname; group = u.group; })
         realUsers)
     (lib.attrValues attrs);
 
@@ -31,7 +31,7 @@ let
   allRootVariant = map
     (entry:
       let e = checkRelative entry; in
-      e // { user = "root"; group = "root"; target = "/root/${e.target}"; })
+      e // { user = "root"; group = "root"; _target = "/root/${e._target}"; })
     (lib.attrValues config.files.all);
 in
 lib.filter matches (lib.concatLists [

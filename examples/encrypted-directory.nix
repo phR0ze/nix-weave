@@ -3,8 +3,7 @@
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  files.root."nginx-certs" = {
-    target = "/etc/nginx/certs";
+  files.any."etc/nginx/certs" = {
     encryptedDir = { sopsFile = ./certs.enc.yaml; prefix = "nginx/certs"; };
     filemode = "0400";
   };

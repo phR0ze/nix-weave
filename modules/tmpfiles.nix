@@ -16,7 +16,7 @@ let
 
   parentDirs = lib.unique (map
     (e: {
-      dir = builtins.dirOf e.target;
+      dir = builtins.dirOf e._target;
       mode = e.dirmode;
       user = ownerStr e.user;
       group = ownerStr e.group;

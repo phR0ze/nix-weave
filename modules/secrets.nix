@@ -10,15 +10,15 @@ let
   ownerStr = v: if builtins.isString v then v else "root";
 
   toSecret = entry: {
-    name = lib.removePrefix "/" entry.target;
+    name = lib.removePrefix "/" entry._target;
     value = {
       sopsFile = entry.encrypted.sopsFile;
       format = entry.encrypted.format;
       # sops-install-secrets treats "/" in `key` as a path separator into nested maps (not a
       # literal character), so the default must not be the full (slash-containing) target --
       # fall back to just its last path component instead.
-      key = if entry.encrypted.key != null then entry.encrypted.key else baseNameOf entry.target;
-      path = entry.target;
+      key = if entry.encrypted.key != null then entry.encrypted.key else baseNameOf entry._target;
+      path = entry._target;
       owner = ownerStr entry.user;
       group = ownerStr entry.group;
       mode = entry.filemode;

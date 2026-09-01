@@ -1,6 +1,6 @@
 # `template` engine: thin passthrough that generates one sops.templates entry per
 # files.templates.<name>, rendered by sops-nix at activation time and placed directly at the
-# entry's target path -- no bespoke activation code needed since sops.templates already
+# entry's _target path -- no bespoke activation code needed since sops.templates already
 # supports arbitrary path/owner/group/mode.
 #
 # Reads config.files.templates directly rather than going through collect.nix/files.any/root/
@@ -14,7 +14,7 @@ let
     inherit name;
     value = {
       content = entry.content;
-      path = entry.target;
+      path = entry._target;
       owner = entry.user;
       group = entry.group;
       mode = entry.filemode;

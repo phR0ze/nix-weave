@@ -13,12 +13,6 @@ with lib.types; attrsOf (submodule (
         description = "Whether this template should be installed.";
       };
 
-      target = lib.mkOption {
-        type = str;
-        default = "/${name}";
-        description = "Absolute destination path for the rendered template.";
-      };
-
       user = lib.mkOption {
         type = str;
         default = "root";
@@ -48,8 +42,16 @@ with lib.types; attrsOf (submodule (
         description = ''
           Template content, mixing ordinary Nix-eval-time text with references to
           config.sops.placeholder for secret values. Rendered by sops-nix at activation time
-          and placed at target.
+          and placed at _target.
         '';
+      };
+
+      # -- internal, computed --
+      _target = lib.mkOption {
+        type = str;
+        internal = true;
+        default = "/${name}";
+        description = "Absolute destination path for the rendered template. Not settable directly.";
       };
     };
   }

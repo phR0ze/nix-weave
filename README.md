@@ -68,10 +68,11 @@ entries. nixos-files has no notion of a single "primary" user; it just looks at
   `config.users.users` entry with `isNormalUser = true`), owned by that user
 - `files.all.<name>` -- installed both for root (`/root/<name>`) and for every real user
 
-For `files.any`/`files.root`, `target` is an absolute path. For `files.user`/`files.all`,
-`target` is instead relative to each user's home directory (e.g. `.config/menus`, not
-`/home/alice/.config/menus`) -- it gets expanded into one instance per real user at activation
-time, so it can't be pinned to a single absolute path.
+The attribute name IS the install path -- there's no separate `target` field to set. For
+`files.any`/`files.root`, the name is an absolute path (prefixed with `/root/` for `files.root`).
+For `files.user`/`files.all`, the name is instead relative to each user's home directory (e.g.
+`.config/menus`, not `/home/alice/.config/menus`) -- it gets expanded into one instance per real
+user at activation time, so it can't be pinned to a single absolute path.
 
 ### Plaintext files
 
@@ -87,8 +88,7 @@ installs a readonly symlink via an atomic `/nix/files` indirection.
 ### Encrypted file
 
 ```nix
-files.root."newt-secret" = {
-  target = "/etc/newt/client-secret";
+files.any."etc/newt/client-secret" = {
   encrypted = { sopsFile = ./secrets.enc.yaml; key = "newt/clientSecret"; };
   filemode = "0400";
 };
@@ -113,8 +113,7 @@ nginx:
 ```
 
 ```nix
-files.root."nginx-certs" = {
-  target = "/etc/nginx/certs";
+files.any."etc/nginx/certs" = {
   encryptedDir = { sopsFile = ./certs.enc.yaml; prefix = "nginx/certs"; };
   filemode = "0400";
 };
@@ -129,8 +128,7 @@ whether another engine's field is set would otherwise force this string, includi
 placeholder interpolation, before `sops.placeholder` itself is available):
 
 ```nix
-files.templates."caddy-env" = {
-  target = "/run/caddy/cloudflare.env";
+files.templates."run/caddy/cloudflare.env" = {
   user = "caddy"; group = "caddy"; filemode = "0400";
   content = ''
     CF_ZONE=example.com
@@ -144,10 +142,9 @@ files.templates."caddy-env" = {
 For the rare case where even the account name is sensitive (plaintext engine only):
 
 ```nix
-files.root."svc-file" = {
-  target = "/opt/svc/data";
-  copy   = ../include/svc/data;
-  user   = { secretRef = "provisioned/svcUser"; sopsFile = ./secrets.enc.yaml; };
+files.any."opt/svc/data" = {
+  copy = ../include/svc/data;
+  user = { secretRef = "provisioned/svcUser"; sopsFile = ./secrets.enc.yaml; };
 };
 ```
 

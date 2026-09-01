@@ -12,8 +12,7 @@ in
     default = { };
     description = "Templated files rendered from mixed plaintext + secret content.";
     example = ''
-      files.templates."caddy-env" = {
-        target = "/run/caddy/cloudflare.env";
+      files.templates."run/caddy/cloudflare.env" = {
         user = "caddy"; group = "caddy"; filemode = "0400";
         content = "CF_API_TOKEN=''${config.sops.placeholder."caddy/cloudflareApiToken"}";
       };

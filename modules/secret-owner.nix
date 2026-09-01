@@ -16,7 +16,7 @@ let
   refEntry = entry: field:
     let ref = entry.${field}; in
     lib.optional (!(builtins.isString ref)) {
-      name = "_files-owner/${filesLib.ownerSecretId entry.target}/${field}";
+      name = "_files-owner/${filesLib.ownerSecretId entry._target}/${field}";
       value = {
         sopsFile =
           if ref.sopsFile != null then ref.sopsFile
