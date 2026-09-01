@@ -4,22 +4,22 @@
 #   - copy / weakCopy / link       (plaintext, installed via the ported activation script)
 #   - encrypted.sopsFile           (single secret file, generates one sops.secrets entry)
 #   - encryptedDir.sopsFile        (directory of secrets, fans out into N sops.secrets entries)
-#   - template.content/.file       (rendered by sops-nix, generates one sops.templates entry)
+#   - template.text/.file          (rendered by sops-nix, generates one sops.templates entry)
 #
 # `options.X.isDefined`, used below to auto-detect which engine an entry is using, forces
 # `config.X`'s value as a side effect of resolving definitions for this submodule instance.
 # That's harmless for the path-typed `encrypted`/`encryptedDir` fields, but would be fatal for
-# `template.content`, which may interpolate `config.sops.placeholder."..."` -- forcing it here
+# `template.text`, which may interpolate `config.sops.placeholder."..."` -- forcing it here
 # would recurse, since sops.placeholder is derived (transitively, through sops.secrets, built by
 # collect.nix from every entry's `_engine`) from the very entries this isDefined check is trying
 # to classify. `template` is therefore declared as `mkOption { type = nullOr (submodule {...}); }`
 # rather than a bare options group like `encrypted`/`encryptedDir`, and classification below
 # checks `config.template != null` (a cheap WHNF/null check) rather than
-# `options.template.content.isDefined` or even `options.template.isDefined` -- the latter was
+# `options.template.text.isDefined` or even `options.template.isDefined` -- the latter was
 # tried and verified (against nixpkgs' module system) to spuriously read `true` whenever *any*
 # sibling option on the same entry (e.g. `copy`) has a definition, even with `template` itself
 # completely untouched. `config.template != null` does not have that problem and, since checking
-# an attrset for non-null-ness doesn't force its nested keys, still never forces `content`.
+# an attrset for non-null-ness doesn't force its nested keys, still never forces `text`.
 #
 # `user`/`group` normally take a plain string, but may instead take `{ secretRef; sopsFile; }`
 # to resolve the actual owner name from a sops secret at activation time (plaintext engine only).
@@ -145,15 +145,15 @@ let
         };
 
         # Wrapped in its own submodule (see header comment) so that classifying this entry as
-        # the template engine never forces `content`'s value.
+        # the template engine never forces `text`'s value.
         template = lib.mkOption {
           type = nullOr (submodule {
             options = {
-              content = lib.mkOption {
+              text = lib.mkOption {
                 type = nullOr lines;
                 default = null;
                 description = ''
-                  Template content, mixing ordinary Nix-eval-time text with references to
+                  Template text, mixing ordinary Nix-eval-time text with references to
                   config.sops.placeholder for secret values. Rendered by sops-nix at activation
                   time. Ignored if `file` is also set.
                 '';
@@ -162,8 +162,8 @@ let
                 type = nullOr path;
                 default = null;
                 description = ''
-                  Path to template content, as an alternative to inline `content`. Takes
-                  precedence over `content` if both are set (matches sops-nix's own
+                  Path to template text, as an alternative to inline `text`. Takes precedence
+                  over `text` if both are set (matches sops-nix's own
                   sops.templates.<name>.file/.content precedence).
                 '';
               };
@@ -172,8 +172,8 @@ let
           default = null;
           description = ''
             Renders via sops-nix's template engine (kind=template): substitutes any
-            config.sops.placeholder references in `content`/`file` and installs the result.
-            Exactly one of `content`/`file` should be set.
+            config.sops.placeholder references in `text`/`file` and installs the result.
+            Exactly one of `text`/`file` should be set.
           '';
         };
 
@@ -216,8 +216,8 @@ let
           # inside another submodule, `isDefined` can spuriously read true merely because a
           # *sibling* option (e.g. `copy`) has a definition, even when `template` itself was
           # never touched. `config.template != null` is the reliable substitute -- also verified
-          # not to force `template.content`'s value (checking an attrset for non-null-ness is a
-          # cheap WHNF check; the nested `content` thunk stays lazy either way).
+          # not to force `template.text`'s value (checking an attrset for non-null-ness is a
+          # cheap WHNF check; the nested `text` thunk stays lazy either way).
           templateSet = config.template != null;
 
           # Exactly one install mechanism may be set per entry -- _kind/source below each pick a

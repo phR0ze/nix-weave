@@ -8,7 +8,7 @@
     user = "caddy";
     group = "caddy";
     filemode = "0400";
-    template.content = ''
+    template.text = ''
       CF_ZONE=example.com
       CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
     '';
