@@ -11,12 +11,12 @@ copy/link installation is handled by a small activation script.
 ### Quick links
 - [Overview](#overview)
   - [Install functions](#install-functions)
-  - [File lifecycle ownership](#file-lifecycle-ownership)
+  - [Content type and ownership](#content-type-and-ownership)
   - [File ownership](#file-ownership)
   - [File permissions](#file-permissions)
 - [Usage](#usage)
+  - [Dedupe sops-nix](#dedupe-sops-nix)
   - [Plaintext files](#plaintext-files)
-    - [Install mechanisms](#install-mechanisms)
   - [Owner resolved from a secret](#owner-resolved-from-a-secret)
   - [Encrypted files](#encrypted-files)
     - [Encrypted file](#encrypted-file)
@@ -34,14 +34,15 @@ copy/link installation is handled by a small activation script.
 For every `files.<install-function>.<name>` the *name* attribute IS the install path -- there's no
 separate field to set. 
 
-| Install function  | Description
-| ----------------- | ---------------------------------------------------------------------
-| `files.any`       | installs files at an arbitrary location on disk
-| `files.root`      | installs files relative to `/root/`
-| `files.user`      | installs files for all real users i.e. `isNormalUser = true`
-| `files.all`       | installs files for both `/root/<name>` and `$HOME/<name>` for every real user
+| Install function    | Description
+| ------------------- | ---------------------------------------------------------------------
+| `files.any`         | installs files at an arbitrary location on disk
+| `files.root`        | installs files relative to `/root/`
+| `files.user`        | installs files for all real users i.e. `isNormalUser = true`
+| `files.all`         | installs files for both `/root/<name>` and `$HOME/<name>` for every real user
+| `users.fromSecret`  | installs a new user/group idempotently from secrets to avoid exposing PII
 
-### File lifecycle ownership
+### Content type and ownership
 Ownership in this sense means who is responsible for the lifecycle of the files. If the files are
 considered ***owned*** then nixos-files will manage the lifecycle and remove the file when no longer
 specified in the configuration or overwrite on each activation with the specified content from the
@@ -49,20 +50,24 @@ configuration to ensure its always correct. If ***unowned*** then nixos-files wi
 installed if it doesn't exist and not touch it after that.
 
 The various content types below have a specific ownership type they evoke.
-`copy`/`link`/`template` are all **owned**. `weakCopy` is the only **unowned** case.
+`copy`/`link`/`template`/`encrypted`/`encryptedDir` are all **owned**. `weakCopy` is the only
+**unowned** case.
 
-Each content type accepts either a ***string*** or a ***path*** -- a string is rendered to a Nix
-store path first (not necessarily ASCII/text, and always a single file -- a directory tree
-requires a path), a path (file, or whole directory for `link`) is used directly. Either way the
-resulting content is installed the same way:
+`copy`/`weakCopy`/`link` accept either a ***string*** or a ***path*** -- a string is rendered to
+a Nix store path first (not necessarily ASCII/text, and always a single file -- a directory tree
+requires a path), a path (file, or whole directory for `link`) is used directly. `encrypted`/
+`encryptedDir` instead always take a `sopsFile` path, decrypted straight to the target by
+sops-nix -- no plaintext ever touches the Nix store or git:
 
-| Content types   | Behavior 
-| --------------- | ------------------------------------------------------------------------------------------------
-| `copy`          | Force-copies the content to the target on every activation
-| `weakCopy`      | Copies the content to the install location if it doesn't exist
-| `link`          | Installs a readonly symlink at the target, pointed at the content
-| `template.text` | Renders the ***text*** template and force-copies to the destination on every activation
-| `template.file` | Renders the ***file*** template and force-copies to the destination on every activation
+| Content types   | Behavior                                                                                |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `copy`          | Force-copies the content to the target on every activation                              |
+| `weakCopy`      | Copies the content to the install location if it doesn't exist                          |
+| `link`          | Installs a readonly symlink at the target, pointed at the content                       |
+| `template.text` | Decrypts and renders the ***text*** template then force-copies on every activation      |
+| `template.file` | Decrypts and renders the ***file*** template then force-copies on every activation      |
+| `encrypted`     | Decrypts a single secret value straight to the target on every activation               |
+| `encryptedDir`  | Decrypts a whole directory of secrets, fanning out into one target file per leaf        |
 
 ### File ownership
 All files default to a particular user and group owner based on which install function was used, with
@@ -109,6 +114,8 @@ files.user.".ssh/id_ed25519" = {
 ```
 
 ## Usage
+Import ***nixos-files*** and set follows for your nixpkgs
+
 ```nix
 {
   inputs = {
@@ -128,6 +135,7 @@ files.user.".ssh/id_ed25519" = {
 }
 ```
 
+### Dedupe sops-nix
 If you also use sops-nix directly yourself (e.g. for `sops.secrets` unrelated to nixos-files),
 you can still import `sops-nix.nixosModules.sops` in your own `modules` list -- NixOS dedupes
 identical module imports automatically, but only if both resolve to the exact same sops-nix
@@ -160,11 +168,15 @@ input. Pin `nixos-files.inputs.sops-nix.follows = "sops-nix";` (alongside declar
 ```
 
 ### Plaintext files
+All the install functions can be used with plaintext text inputs or files that then get packaged up
+in the nix store for installation during activation time. This is a clean, simple way to seed your
+system with configuration files for the system and/or users.
+
 ```nix
-files.any."/etc/asound.conf".copy = "autospawn=no";
-files.root.".dircolors".copy = ../include/home/.dircolors;                 # -> /root/.dircolors
-files.user.".config/menus".link = ../include/xfce-menus;                   # -> every real user's $HOME/.config/menus
-files.all.".motd".copy = "welcome\n";                                      # -> /root/.motd and every real user's $HOME/.motd
+files.any."/etc/asound.conf".copy = "autospawn=no";             # -> /etc/asound.conf
+files.root.".dircolors".copy = ../include/home/.dircolors;      # -> /root/.dircolors
+files.user.".config/menus".link = ../include/xfce-menus;        # -> every real user's $HOME/.config/menus
+files.all.".motd".copy = "welcome\n";                           # -> /root/.motd and every real user's $HOME/.motd
 ```
 
 ### Owner resolved from a secret
@@ -188,9 +200,13 @@ files.any."/opt/svc/data" = {
 ```
 
 ### Encrypted files
-nixos-files provides the ability to encrypt 1 or more files or directories.
+When you want to install sensitive files that shouldn't be stored in a decrypted state in the repo or
+nix store you can use the ***encrypted*** content type to reference an encrypted file that will then
+be decrypted at activation time and wrote to the system as directed.
 
 #### Encrypted file
+The file being consumed needs to have first been encrypted with sops.
+
 ```nix
 files.any."/etc/newt/client-secret" = {
   encrypted = { sopsFile = ./secrets.enc.yaml; key = "newt/clientSecret"; };
@@ -246,14 +262,11 @@ files.any."/run/caddy/cloudflare.env" = {
 ```
 
 ### User created from a secret
-
-For the rare case where even the account/group name itself is sensitive: `users.fromSecret`
-creates a system user and group at activation time, decrypted from sops secrets rather than
-declared via ordinary `users.users`/`users.groups` -- which can't express this, since NixOS's
-declarative user/group activation rewrites `/etc/passwd`/`/etc/group` from attribute names fixed
-at Nix eval time, before any secret is decrypted. `<name>` is just an internal identifier here
-(like `sops.secrets.<name>`), not the real account name. Create-once: re-running activation never
-touches an account that already exists.
+When you want to create a user account without exposing to the world the name of your user you can
+use the ***users.fromSecret*** function which keeps the user and group names as placeholders to then
+be set from secrets at activation time. This keeps them encrypted in your git repo and in the nix
+store and only decrypted at activation time. This is of course idempotent and user accounts are only
+ever created once.
 
 ```nix
 users.fromSecret."svc-account" = {
@@ -263,12 +276,11 @@ users.fromSecret."svc-account" = {
 };
 ```
 
+## Running the examples
 See `examples/` for complete, evaluable configuration snippets. `examples/secrets.enc.yaml`
 and `examples/certs.enc.yaml` are real sops-encrypted files, encrypted with the same disposable
 test age key as `tests/fixtures/*.enc.yaml` (`tests/keys/test-age-key.txt`) purely so the
 examples build end-to-end -- regenerate them with your own key for real usage.
-
-## Running the examples
 
 Each file under `examples/` is also exposed as a `nixosConfigurations.example-<name>` flake
 output (e.g. `plain-file.nix` -> `example-plain-file`), so you can build or boot any of them
