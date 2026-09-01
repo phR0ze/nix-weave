@@ -50,15 +50,21 @@ configuration to ensure its always correct. If ***unowned*** then nixos-files wi
 installed if it doesn't exist and to not touch it after that.
 
 The various content types below have a specific ownership type they evoke.
-`data`/`copy`/`link`/`templates` are all **owned**. `weakCopy` is the only **unowned** case.
+`copy`/`link`/`templates` are all **owned**. `weakCopy` is the only **unowned** case.
 
-| Content types      | Kind | Behavior 
-| ------------------ | ---- | ------------------------------------------------------------------------------------------------
-| `data = "..."`     | copy | Renders the value to a Nix store path, then force-copies to the destination on every activation. Not necessarily ASCII/text.
-| `copy = ./src`     | copy | Force-copies `./src` to the target on every activation, overwriting any local edits made since the last switch.                                                                                        |
-| `weakCopy = ./src` | copy | Copies `./src` to the target once, the first time it's installed, then leaves it (and any local edits to it) alone on every later activation.                                                          |
-| `link = ./src`     | link | Installs a readonly symlink at the target, pointed at `./src` (file or whole directory) via an atomic `/nix/files/<target>` indirection, so a source change swaps what's linked to in one atomic step. |
-| `content = ./src`  | copy | Renders the string and force-copies to the destination on every activation.
+`copy`/`weakCopy`/`link` each accept either a string or a path -- a string is rendered to a Nix
+store path first (not necessarily ASCII/text, and always a single file -- a directory tree
+requires a path), a path (file, or whole directory for `link`) is used directly. Either way the
+resulting content is installed the same way:
+
+| Content types                            | Kind | Behavior 
+| ---------------------------------------- | ---- | ------------------------------------------------------------------------------------------------
+| `copy = ./src` or `copy = "..."`         | copy | Force-copies the content to the target on every activation, overwriting any local edits made since the last switch.
+| `weakCopy = ./src` or `weakCopy = "..."` | copy | Copies the content to the target once, the first time it's installed, then leaves it (and any local edits to it) alone on every later activation.
+| `link = ./src` or `link = "..."`         | link | Installs a readonly symlink at the target, pointed at the content via an atomic `/nix/files/<target>` indirection, so a source change swaps what's linked to in one atomic step.
+
+`files.templates`' `content` is a separate case, always an inline string (never a path) -- see
+[Templated file](#templated-file).
 
 ### File ownership
 All files default to a particular user and group owner based on which install function was used, with
@@ -139,10 +145,10 @@ a different `lib`/sops-nix option schema than the one actually building your sys
 
 ### Plaintext files
 ```nix
-files.any."/etc/asound.conf".data = "autospawn=no";
+files.any."/etc/asound.conf".copy = "autospawn=no";
 files.root.".dircolors".copy = ../include/home/.dircolors;                 # -> /root/.dircolors
 files.user.".config/menus".link = ../include/xfce-menus;                   # -> every real user's $HOME/.config/menus
-files.all.".motd".data = "welcome\n";                                      # -> /root/.motd and every real user's $HOME/.motd
+files.all.".motd".copy = "welcome\n";                                      # -> /root/.motd and every real user's $HOME/.motd
 ```
 
 ### Owner resolved from a secret
@@ -271,7 +277,7 @@ nix flake check
 ## Test suite
 
 `tests/` is a NixOS VM test (`checks.<system>.vmTest`) that boots a machine wired up with every
-engine at once -- plaintext `data`/`copy`/`link` across `files.any`/`root`/`user`/`all`, a single
+engine at once -- plaintext `copy`/`link` across `files.any`/`root`/`user`/`all`, a single
 sops-encrypted file, an encrypted directory fan-out, owner-from-secret resolution, a templated
 file, and a user/group created from a secret -- then asserts the installed content, mode, and
 owner at each target path. Unlike the `examples/`, which are only checked for evaluation, this

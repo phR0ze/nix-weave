@@ -1,4 +1,4 @@
-# NixOS VM test exercising every nixos-files engine end-to-end: plaintext copy/link/data
+# NixOS VM test exercising every nixos-files engine end-to-end: plaintext copy/link
 # fanned out across files.any/root/user/all, sops-nix single-file and directory decryption,
 # owner-from-secret resolution, templated (mixed plaintext + secret) content, and a system
 # user/group created from decrypted secret values. Decrypts
@@ -28,13 +28,13 @@ pkgs.testers.runNixOSTest {
     users.groups.testsvc = { };
     users.users.testsvc = { isSystemUser = true; group = "testsvc"; };
 
-    # -- plaintext: files.root / files.any (data) --
-    files.root.".dircolors".data = "TERM *256color\n";
-    files.any."/etc/example/hello".data = "hello from nixos-files\n";
+    # -- plaintext: files.root / files.any (string content via copy) --
+    files.root.".dircolors".copy = "TERM *256color\n";
+    files.any."/etc/example/hello".copy = "hello from nixos-files\n";
 
     # -- plaintext: files.user / files.all, fanned out per real user --
-    files.user.".config/example.conf".data = "example=1\n";
-    files.all.".motd".data = "welcome\n";
+    files.user.".config/example.conf".copy = "example=1\n";
+    files.all.".motd".copy = "welcome\n";
 
     # -- plaintext: whole directory installed as a readonly symlink --
     files.user.".config/menus".link = ../examples/include/xfce-menus;

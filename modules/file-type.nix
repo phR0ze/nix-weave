@@ -1,7 +1,7 @@
 # Declares the shared fileType submodule used by files.any/files.root/files.user/files.all.
 #
 # Each entry picks exactly one "engine" by setting one of:
-#   - data / copy / weakCopy / link      (plaintext, installed via the ported activation script)
+#   - copy / weakCopy / link      (plaintext, installed via the ported activation script)
 #   - encrypted.sopsFile                 (single secret file, generates one sops.secrets entry)
 #   - encryptedDir.sopsFile              (directory of secrets, fans out into N sops.secrets entries)
 #
@@ -31,7 +31,7 @@ let
         default = null;
         description = ''
           sops file containing secretRef. Defaults to this entry's own encrypted.sopsFile if
-          set; must be given explicitly on plain data/copy/weakCopy/link entries.
+          set; must be given explicitly on plain copy/weakCopy/link entries.
         '';
       };
     };
@@ -70,30 +70,36 @@ let
           description = "Mode of the installed file.";
         };
 
-        # NOTE: data/copy/weakCopy/link/encrypted.sopsFile/encryptedDir.sopsFile deliberately
-        # have NO `default`. `_engine`/`_kind`/`source` below are computed from
-        # `options.*.isDefined` rather than `config.* != null` -- and `isDefined` is true
-        # whenever a `default` is declared, even `default = null`, regardless of whether the
-        # caller actually set it. Omitting the default keeps `isDefined` meaningful.
-
-        data = lib.mkOption {
-          type = nullOr lines;
-          description = "Raw data installed as a plaintext file (kind=copy). Not necessarily ASCII/text.";
-        };
+        # NOTE: copy/weakCopy/link/encrypted.sopsFile/encryptedDir.sopsFile deliberately have NO
+        # `default`. `_engine`/`_kind`/`source` below are computed from `options.*.isDefined`
+        # rather than `config.* != null` -- and `isDefined` is true whenever a `default` is
+        # declared, even `default = null`, regardless of whether the caller actually set it.
+        # Omitting the default keeps `isDefined` meaningful.
 
         copy = lib.mkOption {
-          type = nullOr path;
-          description = "Local file to force-overwrite copy on every switch (kind=copy, owned).";
+          type = nullOr (either lines path);
+          description = ''
+            Content to force-overwrite copy on every switch (kind=copy, owned): a string is
+            rendered to a Nix store path first (not necessarily ASCII/text), a path is used
+            directly.
+          '';
         };
 
         weakCopy = lib.mkOption {
-          type = nullOr path;
-          description = "Local file to copy once -- skipped if the target already exists (kind=copy, unowned).";
+          type = nullOr (either lines path);
+          description = ''
+            Content to copy once -- skipped if the target already exists (kind=copy, unowned): a
+            string is rendered to a Nix store path first, a path is used directly.
+          '';
         };
 
         link = lib.mkOption {
-          type = nullOr path;
-          description = "Local file/directory installed as a readonly symlink (kind=link).";
+          type = nullOr (either lines path);
+          description = ''
+            Content installed as a readonly symlink (kind=link): a string is rendered to a Nix
+            store path first (not necessarily ASCII/text, but always a single file -- a directory
+            tree requires a path), a path (file or directory) is used directly.
+          '';
         };
 
         encrypted = {
@@ -170,7 +176,6 @@ let
           # different one via differing precedence if more than one is set, so silently mixing
           # e.g. copy+link would install with mismatched kind/source rather than erroring.
           setMechanisms = lib.filter (m: m.isDefined) [
-            { name = "data"; isDefined = options.data.isDefined; }
             { name = "copy"; isDefined = options.copy.isDefined; }
             { name = "weakCopy"; isDefined = options.weakCopy.isDefined; }
             { name = "link"; isDefined = options.link.isDefined; }
@@ -187,7 +192,7 @@ let
 
           _engine =
             if tooMany then
-              throw "files.*.\"${name}\" sets more than one install mechanism (${lib.concatMapStringsSep ", " (m: m.name) setMechanisms}) -- set exactly one of data/copy/weakCopy/link/encrypted.sopsFile/encryptedDir.sopsFile"
+              throw "files.*.\"${name}\" sets more than one install mechanism (${lib.concatMapStringsSep ", " (m: m.name) setMechanisms}) -- set exactly one of copy/weakCopy/link/encrypted.sopsFile/encryptedDir.sopsFile"
             else if options.encrypted.sopsFile.isDefined then "encrypted"
             else if options.encryptedDir.sopsFile.isDefined then "encryptedDir"
             else "plaintext";
@@ -197,10 +202,12 @@ let
           _own = if options.weakCopy.isDefined then "unowned" else "owned";
 
           source =
-            if options.copy.isDefined then config.copy
-            else if options.weakCopy.isDefined then config.weakCopy
-            else if options.link.isDefined then config.link
-            else if options.data.isDefined then (pkgs.writeText name config.data)
+            if options.copy.isDefined then
+              (if builtins.isString config.copy then pkgs.writeText name config.copy else config.copy)
+            else if options.weakCopy.isDefined then
+              (if builtins.isString config.weakCopy then pkgs.writeText name config.weakCopy else config.weakCopy)
+            else if options.link.isDefined then
+              (if builtins.isString config.link then pkgs.writeText name config.link else config.link)
             else null;
         };
     }

@@ -2,9 +2,9 @@
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  files.root.".dircolors".data = "TERM *256color\n";
+  files.root.".dircolors".copy = "TERM *256color\n";
 
-  files.any."/etc/example/hello".data = "hello from nixos-files\n";
+  files.any."/etc/example/hello".copy = "hello from nixos-files\n";
 
   # files.user/files.all install for every real (isNormalUser) account -- here, "alice" and "bob".
   users.groups.alice = { };
@@ -20,8 +20,8 @@
     home = "/home/bob";
   };
 
-  files.user.".config/example.conf".data = "example=1\n";
+  files.user.".config/example.conf".copy = "example=1\n";
 
   # Installed at /root/.motd, /home/alice/.motd, and /home/bob/.motd.
-  files.all.".motd".data = "welcome\n";
+  files.all.".motd".copy = "welcome\n";
 }

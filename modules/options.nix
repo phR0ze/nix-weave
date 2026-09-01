@@ -29,7 +29,7 @@ in
         (e.g. "/etc/asound.conf") -- unlike files.root, no prefix is applied automatically.
       '';
       example = ''
-        files.any."/etc/asound.conf".data = "autospawn=no";
+        files.any."/etc/asound.conf".copy = "autospawn=no";
       '';
     };
 
