@@ -10,6 +10,7 @@ copy/link installation is handled by a small activation script.
 
 ### Quick links
 - [Overview](#overview)
+  - [Getting started](#getting-started)
   - [Install functions](#install-functions)
   - [Content type and ownership](#content-type-and-ownership)
   - [File ownership](#file-ownership)
@@ -28,6 +29,33 @@ copy/link installation is handled by a small activation script.
 - [Backlog](#backlog)
 
 ## Overview
+
+### Getting started
+Import ***nixos-files*** and set follows for your nixpkgs
+
+1. Modify your configuration to use nixos-files
+   ```nix
+   {
+     inputs = {
+       nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+       nixos-files.url = "github:phR0ze/nixos-files";
+       nixos-files.inputs.nixpkgs.follows = "nixpkgs";
+     };
+   
+     outputs = { nixpkgs, nixos-files, ... }: {
+       nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+         modules = [
+           nixos-files.nixosModules.default
+           ./configuration.nix
+         ];
+       };
+     };
+   }
+   ```
+2. Install the age key using some form of:
+   1. Create the path on the vm `mkdir -p /var/lib/sops-nix`
+   2. SCP into or out from the VM from/to a known seed system to copy over `key.txt` to that location
+   3. Set permissions `chmod 400 /var/lib/sops-nix/key.txt`
 
 ### Install functions
 ***nixos-files*** provides a number of different ***install functions*** for different purposes.
@@ -114,26 +142,6 @@ files.user.".ssh/id_ed25519" = {
 ```
 
 ## Usage
-Import ***nixos-files*** and set follows for your nixpkgs
-
-```nix
-{
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixos-files.url = "github:phR0ze/nixos-files";
-    nixos-files.inputs.nixpkgs.follows = "nixpkgs";
-  };
-
-  outputs = { nixpkgs, nixos-files, ... }: {
-    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
-      modules = [
-        nixos-files.nixosModules.default
-        ./configuration.nix
-      ];
-    };
-  };
-}
-```
 
 ### Dedupe sops-nix
 If you also use sops-nix directly yourself (e.g. for `sops.secrets` unrelated to nixos-files),
@@ -167,7 +175,7 @@ input. Pin `nixos-files.inputs.sops-nix.follows = "sops-nix";` (alongside declar
 }
 ```
 
-### Plaintext files
+#### Plaintext files
 All the install functions can be used with plaintext text inputs or files that then get packaged up
 in the nix store for installation during activation time. This is a clean, simple way to seed your
 system with configuration files for the system and/or users.
@@ -179,7 +187,7 @@ files.user.".config/menus".link = ../include/xfce-menus;        # -> every real 
 files.all.".motd".copy = "welcome\n";                           # -> /root/.motd and every real user's $HOME/.motd
 ```
 
-### Owner resolved from a secret
+#### Owner resolved from a secret
 When you don't want to expose the user owner or group during plaintext file installation you can use
 secret references. `user` and `group` can each independently be a plain string or a `secretRef`
 -- mix and match as needed:
@@ -199,12 +207,12 @@ files.any."/opt/svc/data" = {
 };
 ```
 
-### Encrypted files
+#### Encrypted files
 When you want to install sensitive files that shouldn't be stored in a decrypted state in the repo or
 nix store you can use the ***encrypted*** content type to reference an encrypted file that will then
 be decrypted at activation time and wrote to the system as directed.
 
-#### Encrypted file
+##### Encrypted file
 The file being consumed needs to have first been encrypted with sops.
 
 ```nix
@@ -214,7 +222,7 @@ files.any."/etc/newt/client-secret" = {
 };
 ```
 
-#### Encrypted directory
+##### Encrypted directory
 Author the directory's content as one sops-encrypted yaml/json file, using genuine nesting
 that mirrors the directory tree -- sops-install-secrets' `key` lookup treats `/` as a path
 separator into nested maps, not a literal character in a flat key name:
@@ -238,7 +246,7 @@ files.any."/etc/nginx/certs" = {
 };
 ```
 
-### Templated file
+#### Templated file
 `template.text`/`template.file` sit alongside `copy`/`weakCopy`/`link` on any
 `files.any`/`root`/`user`/`all` entry -- `text` may reference `config.sops.placeholder`. It's
 nested under `template` rather than a bare field (unlike `copy`) so that classifying an entry as
@@ -261,18 +269,32 @@ files.any."/run/caddy/cloudflare.env" = {
 };
 ```
 
-### User created from a secret
+#### User created from a secret
 When you want to create a user account without exposing to the world the name of your user you can
 use the ***users.fromSecret*** function which keeps the user and group names as placeholders to then
 be set from secrets at activation time. This keeps them encrypted in your git repo and in the nix
 store and only decrypted at activation time. This is of course idempotent and user accounts are only
 ever created once.
 
+Otherwise it behaves like a normal `users.users.<name>` entry -- `isNormalUser`, `uid`, and an
+initial password (`passwordSecretRef`, mirroring `initialPassword`) all work the same way, and an
+`isNormalUser` account gets the same default bash shell, `/home/<user>` home directory (mode
+`0700`), and subuid/subgid range for rootless containers that a declarative one would. The
+primary group always comes from `groupSecretRef` -- unlike `extraGroups`, its name is just as
+sensitive as the username, so there's no plain `group` escape hatch. `extraGroups` is plain
+supplementary membership in already-declared groups:
+
 ```nix
+users.groups.shared = { };
+
 users.fromSecret."svc-account" = {
   sopsFile = ./secrets.enc.yaml;
   userSecretRef = "provisioned/svcUsername";
   groupSecretRef = "provisioned/svcGroupname";
+  passwordSecretRef = "provisioned/svcPassword";
+  isNormalUser = true;
+  uid = 1500;
+  extraGroups = [ "shared" ];
 };
 ```
 
@@ -293,12 +315,25 @@ nix build .#nixosConfigurations.example-plain-file.config.system.build.toplevel
 ```
 
 ### Boot it in a VM
-Boot it in a VM and see the real activation script run
+`examples/base.nix` bakes the disposable `tests/keys/test-age-key.txt` into the VM at
+`/var/lib/sops-nix/key.txt` via `systemd.tmpfiles.rules`, so it boots straight into a working
+example -- no manual key-copying step needed. Never do this with a real key.
 
-```bash
-nixos-rebuild build-vm --flake .#example-plain-file
-./result/bin/run-*-vm
-```
+1. Create and run the test VM:
+   ```bash
+   nixos-rebuild build-vm --flake .#example-user-from-secret
+   ./result/bin/run-*-vm
+   ```
+
+2. Validate the existing encrypted user matches the one in the test vm
+   ```bash
+   SOPS_AGE_KEY_FILE=tests/keys/test-age-key.txt sops edit examples/secrets.enc.yaml
+   ```
+
+3. From inside the test VM retrigger activation
+   ```bash
+   /run/current-system/activate
+   ```
 
 ### Build and eval-check
 Build and eval-check every example at once

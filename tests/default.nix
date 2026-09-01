@@ -74,11 +74,19 @@ pkgs.testers.runNixOSTest {
     };
     sops.secrets."caddy/cloudflareApiToken".sopsFile = ./fixtures/secrets.enc.yaml;
 
-    # -- user/group created at activation, names only known after sops-nix decrypts them --
+    # -- already-declared plain group for users.fromSecret's extraGroups below --
+    users.groups.shared = { };
+
+    # -- user/group created at activation, names only known after sops-nix decrypts them, with
+    # isNormalUser/uid/extraGroups/passwordSecretRef exercising parity with users.users.<name> --
     users.fromSecret."secret-account" = {
       sopsFile = ./fixtures/secrets.enc.yaml;
       userSecretRef = "provisioned/secretUsername";
       groupSecretRef = "provisioned/secretGroupname";
+      passwordSecretRef = "provisioned/secretPassword";
+      isNormalUser = true;
+      uid = 2500;
+      extraGroups = [ "shared" ];
     };
   };
 
@@ -127,10 +135,18 @@ pkgs.testers.runNixOSTest {
         machine.succeed("grep -q '^CF_API_TOKEN=test-cf-api-token$' /run/caddy/cloudflare.env")
         machine.succeed("stat -L -c%U:%G:%a /run/caddy/cloudflare.env | grep -qx 'caddy:caddy:400'")
 
-    with subtest("user/group created at activation from decrypted secrets"):
+    with subtest("user/group created at activation from decrypted secrets, with users.users parity"):
         machine.succeed("getent group secretgrp")
         machine.succeed("id secretsvc")
         machine.succeed("test \"$(id -gn secretsvc)\" = 'secretgrp'")
+        machine.succeed("test \"$(id -u secretsvc)\" = '2500'")
+        machine.succeed("id -nG secretsvc | grep -qw shared")
+        machine.succeed("getent passwd secretsvc | cut -d: -f7 | grep -q '/bin/bash$'")
+        machine.succeed("test -d /home/secretsvc")
+        machine.succeed("stat -c%U:%a /home/secretsvc | grep -qx 'secretsvc:700'")
+        machine.succeed("passwd -S secretsvc | grep -q '^secretsvc P'")
+        machine.succeed("grep -qE '^secretsvc:[0-9]+:65536$' /etc/subuid")
+        machine.succeed("grep -qE '^secretsvc:[0-9]+:65536$' /etc/subgid")
 
     with subtest("re-running activation is idempotent"):
         machine.succeed("/run/current-system/activate")
