@@ -63,11 +63,11 @@ pkgs.testers.runNixOSTest {
     };
 
     # -- templated file: mixed plaintext + sops placeholder --
-    files.templates."/run/caddy/cloudflare.env" = {
+    files.any."/run/caddy/cloudflare.env" = {
       user = "caddy";
       group = "caddy";
       filemode = "0400";
-      content = ''
+      template.content = ''
         CF_ZONE=example.com
         CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
       '';

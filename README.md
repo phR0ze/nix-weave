@@ -40,7 +40,9 @@ field to set.
 | `files.root`      | installs files relative to `/root/`
 | `files.user`      | installs files for all real users i.e. `isNormalUser = true`
 | `files.all`       | installs files for both `/root/<name>` and `$HOME/<name>` for every real user
-| `files.templates` | installs templated files at an arbitrary location on disk similar to `any`
+
+Every one of the four supports the same content types below, including `template` -- there's no
+separate templates-specific install function.
 
 ### File lifecycle ownership
 Ownership in this sense means who is responsible for the lifecycle of the files. If the files are
@@ -50,21 +52,19 @@ configuration to ensure its always correct. If ***unowned*** then nixos-files wi
 installed if it doesn't exist and to not touch it after that.
 
 The various content types below have a specific ownership type they evoke.
-`copy`/`link`/`templates` are all **owned**. `weakCopy` is the only **unowned** case.
+`copy`/`link`/`template` are all **owned**. `weakCopy` is the only **unowned** case.
 
 `copy`/`weakCopy`/`link` each accept either a string or a path -- a string is rendered to a Nix
 store path first (not necessarily ASCII/text, and always a single file -- a directory tree
 requires a path), a path (file, or whole directory for `link`) is used directly. Either way the
 resulting content is installed the same way:
 
-| Content types                            | Kind | Behavior 
-| ---------------------------------------- | ---- | ------------------------------------------------------------------------------------------------
-| `copy = ./src` or `copy = "..."`         | copy | Force-copies the content to the target on every activation, overwriting any local edits made since the last switch.
-| `weakCopy = ./src` or `weakCopy = "..."` | copy | Copies the content to the target once, the first time it's installed, then leaves it (and any local edits to it) alone on every later activation.
-| `link = ./src` or `link = "..."`         | link | Installs a readonly symlink at the target, pointed at the content via an atomic `/nix/files/<target>` indirection, so a source change swaps what's linked to in one atomic step.
-
-`files.templates`' `content` is a separate case, always an inline string (never a path) -- see
-[Templated file](#templated-file).
+| Content types                            | Kind     | Behavior 
+| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------
+| `copy = ./src` or `copy = "..."`         | copy     | Force-copies the content to the target on every activation, overwriting any local edits made since the last switch.
+| `weakCopy = ./src` or `weakCopy = "..."` | copy     | Copies the content to the target once, the first time it's installed, then leaves it (and any local edits to it) alone on every later activation.
+| `link = ./src` or `link = "..."`         | link     | Installs a readonly symlink at the target, pointed at the content via an atomic `/nix/files/<target>` indirection, so a source change swaps what's linked to in one atomic step.
+| `template.content = "..."` or `template.file = ./src` | template | Rendered by sops-nix at activation time, substituting any `config.sops.placeholder` references in `content` -- see [Templated file](#templated-file) for why this is nested under `template` rather than a bare field like `copy`.
 
 ### File ownership
 All files default to a particular user and group owner based on which install function was used, with
@@ -78,9 +78,9 @@ the option to then override in some cases.
 The following provides examples of overridding the user and group for various cases.
 
 ```nix
-files.templates."/run/caddy/cloudflare.env" = {
+files.any."/run/caddy/cloudflare.env" = {
   user = "caddy"; group = "caddy"; filemode = "0400";
-  content = ''
+  template.content = ''
     CF_ZONE=example.com
     CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
   '';
@@ -207,18 +207,18 @@ files.any."/etc/nginx/certs" = {
 ```
 
 ### Templated file
-Templates live in their own `files.templates` namespace, separate from `files.any`/`root`/
-`user`/`all` -- content may reference `config.sops.placeholder`, and keeping templates out of
-the auto-detecting `files.*` submodule avoids a NixOS module-system evaluation cycle (checking
-whether another engine's field is set would otherwise force this string, including its
-placeholder interpolation, before `sops.placeholder` itself is available). The attribute name IS
-the install path and must already be absolute, including the leading `/`, same as `files.any`
-(evaluation fails otherwise):
+`template.content`/`template.file` sit alongside `copy`/`weakCopy`/`link` on any
+`files.any`/`root`/`user`/`all` entry -- content may reference `config.sops.placeholder`. It's
+nested under `template` rather than a bare field (unlike `copy`) so that classifying an entry as
+using the template engine never has to force `content`'s value: `content` may interpolate
+`config.sops.placeholder`, and forcing it prematurely (merely to detect that `template` was set)
+would recurse, since sops-nix only makes `sops.placeholder` available once it already knows
+`sops.templates` is non-empty -- which nixos-files builds from these same entries:
 
 ```nix
-files.templates."/run/caddy/cloudflare.env" = {
+files.any."/run/caddy/cloudflare.env" = {
   user = "caddy"; group = "caddy"; filemode = "0400";
-  content = ''
+  template.content = ''
     CF_ZONE=example.com
     CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
   '';

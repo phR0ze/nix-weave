@@ -8,11 +8,7 @@ let
 
   ownerStr = v: if builtins.isString v then v else "root";
 
-  fileEntries = lib.filter (e: e._engine != "plaintext") (collect { inherit config; });
-
-  templateEntries = lib.filter (e: e.enable) (lib.attrValues config.files.templates);
-
-  entries = fileEntries ++ templateEntries;
+  entries = lib.filter (e: e._engine != "plaintext") (collect { inherit config; });
 
   parentDirs = lib.unique (map
     (e: {

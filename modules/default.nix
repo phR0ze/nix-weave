@@ -10,7 +10,6 @@
     ./secret-owner.nix
     ./secrets.nix
     ./secrets-dir.nix
-    ./files-templates.nix
     ./templates.nix
     ./users-from-secret.nix
     ./tmpfiles.nix

@@ -1,19 +1,25 @@
 # Declares the shared fileType submodule used by files.any/files.root/files.user/files.all.
 #
 # Each entry picks exactly one "engine" by setting one of:
-#   - copy / weakCopy / link      (plaintext, installed via the ported activation script)
-#   - encrypted.sopsFile                 (single secret file, generates one sops.secrets entry)
-#   - encryptedDir.sopsFile              (directory of secrets, fans out into N sops.secrets entries)
+#   - copy / weakCopy / link       (plaintext, installed via the ported activation script)
+#   - encrypted.sopsFile           (single secret file, generates one sops.secrets entry)
+#   - encryptedDir.sopsFile        (directory of secrets, fans out into N sops.secrets entries)
+#   - template.content/.file       (rendered by sops-nix, generates one sops.templates entry)
 #
-# Templated files (mixed plaintext + secret content) are NOT part of this submodule -- see
-# files-templates.nix. `options.X.isDefined`, used below to auto-detect which engine an entry
-# is using, forces `config.X`'s value as a side effect of resolving definitions for this
-# submodule instance. That's harmless for the path-typed `encrypted`/`encryptedDir` fields, but
-# would be fatal for a template's `content` string, which may interpolate
-# `config.sops.placeholder."..."` -- forcing it here would recurse, since sops.placeholder is
-# derived (transitively, through sops.templates) from the very entries this isDefined check is
-# trying to classify. Keeping templates in their own namespace sidesteps the whole problem:
-# membership in files.templates is unambiguous by construction, no isDefined check needed.
+# `options.X.isDefined`, used below to auto-detect which engine an entry is using, forces
+# `config.X`'s value as a side effect of resolving definitions for this submodule instance.
+# That's harmless for the path-typed `encrypted`/`encryptedDir` fields, but would be fatal for
+# `template.content`, which may interpolate `config.sops.placeholder."..."` -- forcing it here
+# would recurse, since sops.placeholder is derived (transitively, through sops.secrets, built by
+# collect.nix from every entry's `_engine`) from the very entries this isDefined check is trying
+# to classify. `template` is therefore declared as `mkOption { type = nullOr (submodule {...}); }`
+# rather than a bare options group like `encrypted`/`encryptedDir`, and classification below
+# checks `config.template != null` (a cheap WHNF/null check) rather than
+# `options.template.content.isDefined` or even `options.template.isDefined` -- the latter was
+# tried and verified (against nixpkgs' module system) to spuriously read `true` whenever *any*
+# sibling option on the same entry (e.g. `copy`) has a definition, even with `template` itself
+# completely untouched. `config.template != null` does not have that problem and, since checking
+# an attrset for non-null-ness doesn't force its nested keys, still never forces `content`.
 #
 # `user`/`group` normally take a plain string, but may instead take `{ secretRef; sopsFile; }`
 # to resolve the actual owner name from a sops secret at activation time (plaintext engine only).
@@ -138,6 +144,39 @@ let
           };
         };
 
+        # Wrapped in its own submodule (see header comment) so that classifying this entry as
+        # the template engine never forces `content`'s value.
+        template = lib.mkOption {
+          type = nullOr (submodule {
+            options = {
+              content = lib.mkOption {
+                type = nullOr lines;
+                default = null;
+                description = ''
+                  Template content, mixing ordinary Nix-eval-time text with references to
+                  config.sops.placeholder for secret values. Rendered by sops-nix at activation
+                  time. Ignored if `file` is also set.
+                '';
+              };
+              file = lib.mkOption {
+                type = nullOr path;
+                default = null;
+                description = ''
+                  Path to template content, as an alternative to inline `content`. Takes
+                  precedence over `content` if both are set (matches sops-nix's own
+                  sops.templates.<name>.file/.content precedence).
+                '';
+              };
+            };
+          });
+          default = null;
+          description = ''
+            Renders via sops-nix's template engine (kind=template): substitutes any
+            config.sops.placeholder references in `content`/`file` and installs the result.
+            Exactly one of `content`/`file` should be set.
+          '';
+        };
+
         # -- internal, computed --
         _target = lib.mkOption {
           type = str;
@@ -164,7 +203,7 @@ let
         };
 
         _engine = lib.mkOption {
-          type = enum [ "plaintext" "encrypted" "encryptedDir" ];
+          type = enum [ "plaintext" "encrypted" "encryptedDir" "template" ];
           internal = true;
           description = "Which engine this entry is installed through.";
         };
@@ -172,6 +211,15 @@ let
 
       config =
         let
+          # `template`'s own `options.template.isDefined` is unreliable here: verified against
+          # nixpkgs' module system that for a `nullOr (submodule {...})`-typed option nested
+          # inside another submodule, `isDefined` can spuriously read true merely because a
+          # *sibling* option (e.g. `copy`) has a definition, even when `template` itself was
+          # never touched. `config.template != null` is the reliable substitute -- also verified
+          # not to force `template.content`'s value (checking an attrset for non-null-ness is a
+          # cheap WHNF check; the nested `content` thunk stays lazy either way).
+          templateSet = config.template != null;
+
           # Exactly one install mechanism may be set per entry -- _kind/source below each pick a
           # different one via differing precedence if more than one is set, so silently mixing
           # e.g. copy+link would install with mismatched kind/source rather than erroring.
@@ -181,6 +229,7 @@ let
             { name = "link"; isDefined = options.link.isDefined; }
             { name = "encrypted.sopsFile"; isDefined = options.encrypted.sopsFile.isDefined; }
             { name = "encryptedDir.sopsFile"; isDefined = options.encryptedDir.sopsFile.isDefined; }
+            { name = "template"; isDefined = templateSet; }
           ];
           tooMany = lib.length setMechanisms > 1;
         in
@@ -192,9 +241,10 @@ let
 
           _engine =
             if tooMany then
-              throw "files.*.\"${name}\" sets more than one install mechanism (${lib.concatMapStringsSep ", " (m: m.name) setMechanisms}) -- set exactly one of copy/weakCopy/link/encrypted.sopsFile/encryptedDir.sopsFile"
+              throw "files.*.\"${name}\" sets more than one install mechanism (${lib.concatMapStringsSep ", " (m: m.name) setMechanisms}) -- set exactly one of copy/weakCopy/link/encrypted.sopsFile/encryptedDir.sopsFile/template"
             else if options.encrypted.sopsFile.isDefined then "encrypted"
             else if options.encryptedDir.sopsFile.isDefined then "encryptedDir"
+            else if templateSet then "template"
             else "plaintext";
 
           _kind = if options.link.isDefined then "link" else "copy";
