@@ -1,6 +1,7 @@
 # NixOS VM test exercising every nixos-files engine end-to-end: plaintext copy/link/text
 # fanned out across files.any/root/user/all, sops-nix single-file and directory decryption,
-# owner-from-secret resolution, and templated (mixed plaintext + secret) content. Decrypts
+# owner-from-secret resolution, templated (mixed plaintext + secret) content, and a system
+# user/group created from decrypted secret values. Decrypts
 # real (test-only, see keys/README.md) sops fixtures at activation time rather than mocking
 # sops-nix, since the whole point is to prove the generated sops.secrets/sops.templates wiring
 # actually decrypts and lands at the right path/mode/owner.
@@ -29,7 +30,7 @@ pkgs.testers.runNixOSTest {
 
     # -- plaintext: files.root / files.any (text) --
     files.root.".dircolors".text = "TERM *256color\n";
-    files.any."etc/example/hello".text = "hello from nixos-files\n";
+    files.any."/etc/example/hello".text = "hello from nixos-files\n";
 
     # -- plaintext: files.user / files.all, fanned out per real user --
     files.user.".config/example.conf".text = "example=1\n";
@@ -39,24 +40,24 @@ pkgs.testers.runNixOSTest {
     files.user.".config/menus".link = ../examples/include/xfce-menus;
 
     # -- plaintext: single file force-copied on every switch --
-    files.any."opt/svc/data-copy" = {
+    files.any."/opt/svc/data-copy" = {
       copy = ../examples/include/svc/data;
     };
 
     # -- encrypted: single file, decrypted straight to target by sops-nix --
-    files.any."etc/newt/client-secret" = {
+    files.any."/etc/newt/client-secret" = {
       encrypted = { sopsFile = ./fixtures/secrets.enc.yaml; key = "newt/clientSecret"; };
       filemode = "0400";
     };
 
     # -- encrypted: directory fanned out into one sops.secrets entry per leaf --
-    files.any."etc/nginx/certs" = {
+    files.any."/etc/nginx/certs" = {
       encryptedDir = { sopsFile = ./fixtures/certs.enc.yaml; prefix = "nginx/certs"; };
       filemode = "0400";
     };
 
     # -- owner resolved from a decrypted secret, never appearing in cleartext config --
-    files.any."opt/svc/data" = {
+    files.any."/opt/svc/data" = {
       copy = ../examples/include/svc/data;
       user = { secretRef = "provisioned/svcUser"; sopsFile = ./fixtures/secrets.enc.yaml; };
     };
@@ -72,6 +73,13 @@ pkgs.testers.runNixOSTest {
       '';
     };
     sops.secrets."caddy/cloudflareApiToken".sopsFile = ./fixtures/secrets.enc.yaml;
+
+    # -- user/group created at activation, names only known after sops-nix decrypts them --
+    users.fromSecret."secret-account" = {
+      sopsFile = ./fixtures/secrets.enc.yaml;
+      userSecretRef = "provisioned/secretUsername";
+      groupSecretRef = "provisioned/secretGroupname";
+    };
   };
 
   testScript = ''
@@ -119,9 +127,15 @@ pkgs.testers.runNixOSTest {
         machine.succeed("grep -q '^CF_API_TOKEN=test-cf-api-token$' /run/caddy/cloudflare.env")
         machine.succeed("stat -L -c%U:%G:%a /run/caddy/cloudflare.env | grep -qx 'caddy:caddy:400'")
 
+    with subtest("user/group created at activation from decrypted secrets"):
+        machine.succeed("getent group secretgrp")
+        machine.succeed("id secretsvc")
+        machine.succeed("test \"$(id -gn secretsvc)\" = 'secretgrp'")
+
     with subtest("re-running activation is idempotent"):
         machine.succeed("/run/current-system/activate")
         machine.succeed("test \"$(cat /etc/newt/client-secret)\" = 'test-newt-client-secret'")
         machine.succeed("test -s /opt/svc/data-copy")
+        machine.succeed("id secretsvc")
   '';
 }

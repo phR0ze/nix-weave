@@ -18,6 +18,7 @@
         "encrypted-directory"
         "templated-file"
         "owner-from-secret"
+        "user-from-secret"
       ];
 
       mkExample = system: name: nixpkgs.lib.nixosSystem {
@@ -44,7 +45,8 @@
 
       # `nix build .#checks.<system>.vmTest -L`, or `nix flake check`, to boot a VM and assert
       # every engine (plaintext copy/link/text, sops-nix encrypted file/directory,
-      # owner-from-secret, templated content) actually installs correctly at activation time.
+      # owner-from-secret, templated content, user-from-secret) actually installs correctly at
+      # activation time.
       checks = forAllSystems (system:
         let pkgs = import nixpkgs { inherit system; }; in
         {

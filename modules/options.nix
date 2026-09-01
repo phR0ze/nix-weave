@@ -1,7 +1,7 @@
 # Declares the four files.* wrapper namespaces, all sharing the fileType submodule
 # (see file-type.nix):
 #
-#   files.any.<name>   -- arbitrary absolute path, owned root:root
+#   files.any.<name>   -- arbitrary absolute path (name must start with "/"), owned root:root
 #   files.root.<name>  -- under /root/, owned root:root
 #   files.user.<name>  -- under every real user's home directory, owned by that user
 #   files.all.<name>   -- files.root + files.user combined (root's copy + every real user's copy)
@@ -22,11 +22,14 @@ in
 {
   options.files = {
     any = lib.mkOption {
-      type = types.fileType { user = "root"; group = "root"; prefix = "/"; };
+      type = types.fileType { user = "root"; group = "root"; prefix = ""; requireAbsolute = true; };
       default = { };
-      description = "Files installed at an arbitrary absolute path.";
+      description = ''
+        Files installed at an arbitrary absolute path. The attribute name must start with "/"
+        (e.g. "/etc/asound.conf") -- unlike files.root, no prefix is applied automatically.
+      '';
       example = ''
-        files.any."etc/asound.conf".text = "autospawn=no";
+        files.any."/etc/asound.conf".text = "autospawn=no";
       '';
     };
 

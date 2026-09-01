@@ -4,7 +4,7 @@
 {
   files.root.".dircolors".text = "TERM *256color\n";
 
-  files.any."etc/example/hello".text = "hello from nixos-files\n";
+  files.any."/etc/example/hello".text = "hello from nixos-files\n";
 
   # files.user/files.all install for every real (isNormalUser) account -- here, "alice" and "bob".
   users.groups.alice = { };

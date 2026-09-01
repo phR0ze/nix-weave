@@ -37,7 +37,7 @@ let
     };
   });
 
-  fileType = { user, group, prefix }: with lib.types; attrsOf (submodule (
+  fileType = { user, group, prefix, requireAbsolute ? false }: with lib.types; attrsOf (submodule (
     { name, config, options, ... }: {
       options = {
         enable = lib.mkOption {
@@ -164,25 +164,45 @@ let
         };
       };
 
-      config = {
-        _target = "${prefix}${name}";
+      config =
+        let
+          # Exactly one install mechanism may be set per entry -- _kind/source below each pick a
+          # different one via differing precedence if more than one is set, so silently mixing
+          # e.g. copy+link would install with mismatched kind/source rather than erroring.
+          setMechanisms = lib.filter (m: m.isDefined) [
+            { name = "text"; isDefined = options.text.isDefined; }
+            { name = "copy"; isDefined = options.copy.isDefined; }
+            { name = "weakCopy"; isDefined = options.weakCopy.isDefined; }
+            { name = "link"; isDefined = options.link.isDefined; }
+            { name = "encrypted.sopsFile"; isDefined = options.encrypted.sopsFile.isDefined; }
+            { name = "encryptedDir.sopsFile"; isDefined = options.encryptedDir.sopsFile.isDefined; }
+          ];
+          tooMany = lib.length setMechanisms > 1;
+        in
+        {
+          _target =
+            if requireAbsolute && !(lib.hasPrefix "/" name) then
+              throw "files.any.\"${name}\" must be an absolute path starting with \"/\" (e.g. files.any.\"/etc/asound.conf\")"
+            else "${prefix}${name}";
 
-        _engine =
-          if options.encrypted.sopsFile.isDefined then "encrypted"
-          else if options.encryptedDir.sopsFile.isDefined then "encryptedDir"
-          else "plaintext";
+          _engine =
+            if tooMany then
+              throw "files.*.\"${name}\" sets more than one install mechanism (${lib.concatMapStringsSep ", " (m: m.name) setMechanisms}) -- set exactly one of text/copy/weakCopy/link/encrypted.sopsFile/encryptedDir.sopsFile"
+            else if options.encrypted.sopsFile.isDefined then "encrypted"
+            else if options.encryptedDir.sopsFile.isDefined then "encryptedDir"
+            else "plaintext";
 
-        _kind = if options.link.isDefined then "link" else "copy";
+          _kind = if options.link.isDefined then "link" else "copy";
 
-        _own = if options.weakCopy.isDefined then "unowned" else "owned";
+          _own = if options.weakCopy.isDefined then "unowned" else "owned";
 
-        source =
-          if options.copy.isDefined then config.copy
-          else if options.weakCopy.isDefined then config.weakCopy
-          else if options.link.isDefined then config.link
-          else if options.text.isDefined then (pkgs.writeText name config.text)
-          else null;
-      };
+          source =
+            if options.copy.isDefined then config.copy
+            else if options.weakCopy.isDefined then config.weakCopy
+            else if options.link.isDefined then config.link
+            else if options.text.isDefined then (pkgs.writeText name config.text)
+            else null;
+        };
     }
   ));
 in
