@@ -62,31 +62,29 @@ all **owned**. `weakCopy` is the only **unowned** case.
 All files default to a particular user and group owner based on which install function was used, with
 the option to then override in some cases.
 
-For each real user (every config.users.users entry with isNormalUser = true), the entry's user is forced to that user's account name
-  (uname) and group is forced to that user's primary group (u.group) — taken straight from config.users.users.<uname>.group. This overrides
-  whatever user/group you might have set on the entry itself, which is also documented in modules/options.nix:12-13: "Any user/group set on a
-  files.user/files.all entry is ignored; the real per-user (or root, for files.all's root copy) owner is always used."
+* `files.any` - defaults to `root:root` and ***allows for overriding user and group***
+* `files.root` - defaults to `root:root` and can not be overridden
+* `files.user` - defaults to the implicated user and can not be overridden
+* `files.all` - defaults to the implicated user and can not be overridden
 
-  files.all behaves the same way for its per-user copies, plus a root-owned copy (user = "root"; group = "root";) via allRootVariant.
+The following provides examples of overridding the user and group for various cases.
 
-✻ Churned for 6s
+```nix
+files.templates."/run/caddy/cloudflare.env" = {
+  user = "caddy"; group = "caddy"; filemode = "0400";
+  content = ''
+    CF_ZONE=example.com
+    CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
+  '';
+};
 
-❯ what about default permissions for user files like these
-
-● From modules/file-type.nix:
-
-  dirmode = lib.mkOption {
-    type = str;
-    default = "0755";
-    description = "Mode of any directories created to hold this entry.";
-  };
-
-  filemode = lib.mkOption {
-    type = str;
-    default = "0644";
-    description = "Mode of the installed file.";
-  };
-
+# Protected user and group
+files.any."/opt/svc/data" = {
+  copy = ../include/svc/data;
+  user = { secretRef = "provisioned/svcUser"; sopsFile = ./secrets.enc.yaml; };
+  group = { secretRef = "provisioned/svcGroup"; sopsFile = ./secrets.enc.yaml; };
+};
+```
 
 ### File permissions
 All files default to `0644` and all directories default to `0755`. However you can override these
@@ -205,12 +203,12 @@ Templates live in their own `files.templates` namespace, separate from `files.an
 `user`/`all` -- content may reference `config.sops.placeholder`, and keeping templates out of
 the auto-detecting `files.*` submodule avoids a NixOS module-system evaluation cycle (checking
 whether another engine's field is set would otherwise force this string, including its
-placeholder interpolation, before `sops.placeholder` itself is available). The attribute name is
-the install path, prefixed with `/` automatically (like `files.root` prefixes with `/root/`), so
-no leading `/` is used or needed:
+placeholder interpolation, before `sops.placeholder` itself is available). The attribute name IS
+the install path and must already be absolute, including the leading `/`, same as `files.any`
+(evaluation fails otherwise):
 
 ```nix
-files.templates."run/caddy/cloudflare.env" = {
+files.templates."/run/caddy/cloudflare.env" = {
   user = "caddy"; group = "caddy"; filemode = "0400";
   content = ''
     CF_ZONE=example.com

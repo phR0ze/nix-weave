@@ -33,10 +33,16 @@ let
       let e = checkRelative entry; in
       e // { user = "root"; group = "root"; _target = "/root/${e._target}"; })
     (lib.attrValues config.files.all);
+
+  # files.root is always root:root -- force it here rather than merely defaulting to it in
+  # options.nix, same as files.user/files.all force the real per-user (or root) owner.
+  rootFiles = map
+    (entry: entry // { user = "root"; group = "root"; })
+    (lib.attrValues config.files.root);
 in
 lib.filter matches (lib.concatLists [
   (lib.attrValues config.files.any)
-  (lib.attrValues config.files.root)
+  rootFiles
   (expandPerUser config.files.user)
   (expandPerUser config.files.all)
   allRootVariant

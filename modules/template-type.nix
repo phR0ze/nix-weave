@@ -50,7 +50,10 @@ with lib.types; attrsOf (submodule (
       _target = lib.mkOption {
         type = str;
         internal = true;
-        default = "/${name}";
+        default =
+          if !(lib.hasPrefix "/" name) then
+            throw "files.templates.\"${name}\" must be an absolute path starting with \"/\" (e.g. files.templates.\"/run/caddy/cloudflare.env\")"
+          else name;
         description = "Absolute destination path for the rendered template. Not settable directly.";
       };
     };

@@ -63,7 +63,7 @@ pkgs.testers.runNixOSTest {
     };
 
     # -- templated file: mixed plaintext + sops placeholder --
-    files.templates."run/caddy/cloudflare.env" = {
+    files.templates."/run/caddy/cloudflare.env" = {
       user = "caddy";
       group = "caddy";
       filemode = "0400";
