@@ -1,4 +1,4 @@
-# Plaintext engine: builds a filesPackage (like environment.etc) from every text/copy/weakCopy/
+# Plaintext engine: builds a filesPackage (like environment.etc) from every data/copy/weakCopy/
 # link entry across files.any/root/user/all, then installs it via a ported activation script.
 #
 # secretRef-backed user/group values are written into the store's .meta sidecars only as a

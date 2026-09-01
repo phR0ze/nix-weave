@@ -1,5 +1,5 @@
 # Generates internal sops.secrets entries for every secretRef-backed user/group value on a
-# plaintext (text/copy/weakCopy/link) entry, so the ported install script can resolve the real
+# plaintext (data/copy/weakCopy/link) entry, so the ported install script can resolve the real
 # owner name at activation time via the "@secret:<path>" sentinel written into the store's
 # .meta sidecars (see plaintext.nix).
 #
