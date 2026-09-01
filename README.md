@@ -109,13 +109,30 @@ files.user.".ssh/id_ed25519" = {
 ```
 
 ## Usage
-Import both `sops-nix.nixosModules.sops` and this flake's `nixosModules.default` -- nixos-files
-never bundles or re-declares the sops-nix module itself, so you must import it yourself
-alongside `nixos-files.nixosModules.default`. Pin `nixos-files`' and `sops-nix`'s own
-`nixpkgs`/`sops-nix` inputs to `follows` your top-level ones -- without this, `nixpkgs` and
-`sops-nix` each get resolved independently three times (top-level, sops-nix's own, and
-nixos-files' own), which bloats the closure/eval time and risks nixos-files evaluating against
-a different `lib`/sops-nix option schema than the one actually building your system:
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixos-files.url = "github:phR0ze/nixos-files";
+    nixos-files.inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs = { nixpkgs, nixos-files, ... }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      modules = [
+        nixos-files.nixosModules.default
+        ./configuration.nix
+      ];
+    };
+  };
+}
+```
+
+If you also use sops-nix directly yourself (e.g. for `sops.secrets` unrelated to nixos-files),
+you can still import `sops-nix.nixosModules.sops` in your own `modules` list -- NixOS dedupes
+identical module imports automatically, but only if both resolve to the exact same sops-nix
+input. Pin `nixos-files.inputs.sops-nix.follows = "sops-nix";` (alongside declaring your own
+`sops-nix.url` input) to guarantee that:
 
 ```nix
 {

@@ -6,12 +6,12 @@
 # sops-nix, since the whole point is to prove the generated sops.secrets/sops.templates wiring
 # actually decrypts and lands at the right path/mode/owner.
 #---------------------------------------------------------------------------------------------------
-{ pkgs, sops-nix, nixos-files }:
+{ pkgs, nixos-files }:
 pkgs.testers.runNixOSTest {
   name = "nixos-files";
 
   nodes.machine = { config, ... }: {
-    imports = [ sops-nix.nixosModules.sops nixos-files ];
+    imports = [ nixos-files ];
 
     sops.age.keyFile = "/etc/nixos-files-test-key.txt";
     environment.etc."nixos-files-test-key.txt" = {

@@ -1,7 +1,7 @@
-# nixos-files entry point. Deliberately does NOT import sops-nix's own module (only writes into
-# config.sops.secrets/config.sops.templates) -- consumers must import
-# inputs.sops-nix.nixosModules.sops themselves alongside this module, to avoid duplicate option
-# declarations when they also import sops-nix directly for their own secrets.
+# nixos-files entry point: declares only nixos-files' own options/config (writes into
+# config.sops.secrets/config.sops.templates, never re-declares them). sops-nix's own module is
+# bundled alongside this one at the flake level -- see flake.nix's `nixosModules.default`, not
+# here, since this file has no access to the sops-nix flake input.
 #---------------------------------------------------------------------------------------------------
 {
   imports = [
