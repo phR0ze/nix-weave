@@ -10,7 +10,7 @@
 pkgs.testers.runNixOSTest {
   name = "nixos-files";
 
-  nodes.machine = { config, ... }: {
+  nodes.machine = { config, pkgs, ... }: {
     imports = [ nixos-files ];
 
     sops.age.keyFile = "/etc/nixos-files-test-key.txt";
@@ -62,17 +62,33 @@ pkgs.testers.runNixOSTest {
       user = { secretRef = "provisioned/svcUser"; sopsFile = ./fixtures/secrets.enc.yaml; };
     };
 
-    # -- templated file: mixed plaintext + sops placeholder --
-    files.any."/run/caddy/cloudflare.env" = {
-      user = "caddy";
+    # -- templated file: mixed plaintext + two sops placeholders, secrets registered inline via
+    # the template's own `secrets` field rather than a separate sops.secrets block --
+    files.templates."cloudflare-env" = {
+      path = "/run/caddy/cloudflare.env";   # defaults to /run/secrets/rendered/<name> like sops-nix
+      user = "caddy";                       # defaults to root:root like sops-nix
       group = "caddy";
-      filemode = "0400";
-      template.text = ''
-        CF_ZONE=example.com
+      content = ''
+        CF_ZONE=${config.sops.placeholder."caddy/cfZone"}
         CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
       '';
+      secrets = {
+        "caddy/cfZone".sopsFile = ./fixtures/secrets.enc.yaml;
+        "caddy/cloudflareApiToken".sopsFile = ./fixtures/secrets.enc.yaml;
+      };
     };
-    sops.secrets."caddy/cloudflareApiToken".sopsFile = ./fixtures/secrets.enc.yaml;
+
+    # -- consume files.templates."cloudflare-env".path as an input elsewhere, to prove it
+    # resolves to the same real, rendered path rather than just round-tripping a Nix string --
+    systemd.services.cloudflare-env-check = {
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        EnvironmentFile = config.files.templates."cloudflare-env".path;
+        ExecStart = "${pkgs.bash}/bin/bash -c 'echo \"$CF_ZONE\" > /run/cloudflare-env-check-zone'";
+      };
+    };
 
     # -- already-declared plain group for users.fromSecret's extraGroups below --
     users.groups.shared = { };
@@ -130,10 +146,14 @@ pkgs.testers.runNixOSTest {
     with subtest("owner resolved from a decrypted secret, never appearing in cleartext config"):
         machine.succeed("stat -c%U /opt/svc/data | grep -qx testsvc")
 
-    with subtest("templated file mixes plaintext and a sops placeholder"):
-        machine.succeed("grep -q '^CF_ZONE=example.com$' /run/caddy/cloudflare.env")
+    with subtest("templated file mixes plaintext and two sops placeholders"):
+        machine.succeed("grep -q '^CF_ZONE=test-cf-zone.example.com$' /run/caddy/cloudflare.env")
         machine.succeed("grep -q '^CF_API_TOKEN=test-cf-api-token$' /run/caddy/cloudflare.env")
         machine.succeed("stat -L -c%U:%G:%a /run/caddy/cloudflare.env | grep -qx 'caddy:caddy:400'")
+
+    with subtest("files.templates.\"cloudflare-env\".path resolves to the real rendered file when used as an input elsewhere"):
+        machine.wait_for_unit("cloudflare-env-check.service")
+        machine.succeed("test \"$(cat /run/cloudflare-env-check-zone)\" = 'test-cf-zone.example.com'")
 
     with subtest("user/group created at activation from decrypted secrets, with users.users parity"):
         machine.succeed("getent group secretgrp")

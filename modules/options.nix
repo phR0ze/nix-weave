@@ -15,9 +15,8 @@
 # The attribute name is always the install path (prefixed per-namespace below); there is no
 # settable `target` field, so there's exactly one place path/naming can come from.
 #
-# Every namespace also supports `template.text`/`template.file` (see file-type.nix), rendered
-# by sops-nix -- substituting any config.sops.placeholder references -- instead of installed via
-# the plaintext copy/link script.
+# Rendered (sops-nix template) content is a separate, standalone `files.templates.<name>`
+# namespace (see templates.nix/template-type.nix) rather than another field here.
 #---------------------------------------------------------------------------------------------------
 { lib, pkgs, ... }:
 let

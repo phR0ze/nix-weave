@@ -54,9 +54,8 @@
         (attrName: mkExample "x86_64-linux" (nixpkgs.lib.removePrefix "example-" attrName));
 
       # `nix build .#checks.<system>.vmTest -L`, or `nix flake check`, to boot a VM and assert
-      # every engine (plaintext copy/link/text, sops-nix encrypted file/directory,
-      # owner-from-secret, templated content, user-from-secret) actually installs correctly at
-      # activation time.
+      # every engine (plaintext copy/link, sops-nix encrypted file/directory, owner-from-secret,
+      # files.templates, user-from-secret) actually installs correctly at activation time.
       checks = forAllSystems (system:
         let pkgs = import nixpkgs { inherit system; }; in
         {

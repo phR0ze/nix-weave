@@ -22,7 +22,7 @@ copy/link installation is handled by a small activation script.
   - [Encrypted files](#encrypted-files)
     - [Encrypted file](#encrypted-file)
     - [Encrypted directory](#encrypted-directory)
-  - [Templated file](#templated-file)
+  - [Templated files](#templated-files)
   - [User created from a secret](#user-created-from-a-secret)
 - [Running the examples](#running-the-examples)
 - [Test suite](#test-suite)
@@ -60,7 +60,8 @@ Import ***nixos-files*** and set follows for your nixpkgs
 ### Install functions
 ***nixos-files*** provides a number of different ***install functions*** for different purposes.
 For every `files.<install-function>.<name>` the *name* attribute IS the install path -- there's no
-separate field to set. 
+separate field to set, **except `files.templates`**, where *name* is just an identifier (mirroring
+sops-nix's own `sops.templates."<name>"`) and the install path is set via its own `path` field.
 
 | Install function    | Description
 | ------------------- | ---------------------------------------------------------------------
@@ -68,6 +69,7 @@ separate field to set.
 | `files.root`        | installs files relative to `/root/`
 | `files.user`        | installs files for all real users i.e. `isNormalUser = true`
 | `files.all`         | installs files for both `/root/<name>` and `$HOME/<name>` for every real user
+| `files.templates`   | renders a file mixing plaintext and secret fields via sops-nix's template engine
 | `users.fromSecret`  | installs a new user/group idempotently from secrets to avoid exposing PII
 
 ### Content type and ownership
@@ -78,8 +80,8 @@ configuration to ensure its always correct. If ***unowned*** then nixos-files wi
 installed if it doesn't exist and not touch it after that.
 
 The various content types below have a specific ownership type they evoke.
-`copy`/`link`/`template`/`encrypted`/`encryptedDir` are all **owned**. `weakCopy` is the only
-**unowned** case.
+`copy`/`link`/`encrypted`/`encryptedDir` (and `files.templates` entries) are all **owned**.
+`weakCopy` is the only **unowned** case.
 
 `copy`/`weakCopy`/`link` accept either a ***string*** or a ***path*** -- a string is rendered to
 a Nix store path first (not necessarily ASCII/text, and always a single file -- a directory tree
@@ -87,15 +89,13 @@ requires a path), a path (file, or whole directory for `link`) is used directly.
 `encryptedDir` instead always take a `sopsFile` path, decrypted straight to the target by
 sops-nix -- no plaintext ever touches the Nix store or git:
 
-| Content types   | Behavior                                                                                |
-| --------------- | --------------------------------------------------------------------------------------- |
-| `copy`          | Force-copies the content to the target on every activation                              |
-| `weakCopy`      | Copies the content to the install location if it doesn't exist                          |
-| `link`          | Installs a readonly symlink at the target, pointed at the content                       |
-| `template.text` | Decrypts and renders the ***text*** template then force-copies on every activation      |
-| `template.file` | Decrypts and renders the ***file*** template then force-copies on every activation      |
-| `encrypted`     | Decrypts a single secret value straight to the target on every activation               |
-| `encryptedDir`  | Decrypts a whole directory of secrets, fanning out into one target file per leaf        |
+| Content types   | Behavior                                                                         |
+| --------------- | -------------------------------------------------------------------------------- |
+| `copy`          | Force-copies the content to the target on every activation                       |
+| `weakCopy`      | Copies the content to the install location if it doesn't exist                   |
+| `link`          | Installs a readonly symlink at the target, pointed at the content                |
+| `encrypted`     | Decrypts a single secret value straight to the target on every activation        |
+| `encryptedDir`  | Decrypts a whole directory of secrets, fanning out into one target file per leaf |
 
 ### File ownership
 All files default to a particular user and group owner based on which install function was used, with
@@ -105,17 +105,15 @@ the option to then override in some cases.
 * `files.root` - defaults to `root:root` and can not be overridden
 * `files.user` - defaults to the implicated user and can not be overridden
 * `files.all` - defaults to the implicated user and can not be overridden
+* `files.templates` - defaults to `root:root` and ***allows for overriding user and group***
 
 The following provides examples of overridding the user and group for the ***any*** install function.
 
 ```nix
-# Templated file
-files.any."/run/caddy/cloudflare.env" = {
+# Overridden user and group
+files.any."/run/caddy/cache" = {
+  copy = ../include/caddy/cache;
   user = "caddy"; group = "caddy"; filemode = "0400";
-  template.text = ''
-    CF_ZONE=example.com
-    CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
-  '';
 };
 
 # Protected user and group
@@ -246,26 +244,33 @@ files.any."/etc/nginx/certs" = {
 };
 ```
 
-#### Templated file
-`template.text`/`template.file` sit alongside `copy`/`weakCopy`/`link` on any
-`files.any`/`root`/`user`/`all` entry -- `text` may reference `config.sops.placeholder`. It's
-nested under `template` rather than a bare field (unlike `copy`) so that classifying an entry as
-using the template engine never has to force `text`'s value: `text` may interpolate
-`config.sops.placeholder`, and forcing it prematurely (merely to detect that `template` was set)
-would recurse, since sops-nix only makes `sops.placeholder` available once it already knows
-`sops.templates` is non-empty -- which nixos-files builds from these same entries. `text`/`file`
-also can't be merged into one field the way `copy`/`weakCopy` accept either a string or a path:
-distinguishing which was given requires checking the value's type (`builtins.isString`/`isPath`),
-and that check itself forces the value -- reopening the same hazard for `text`, which is why
-they're two separately-typed fields instead:
+#### Templated files
+***files.templates*** is its own standalone install function (like ***users.fromSecret***, not a
+field on `files.any`/`root`/`user`/`all`) for content rendered by sops-nix's template engine --
+`content`/`file` may reference `config.sops.placeholder`. The attribute name is just an
+identifier, mirroring sops-nix's own `sops.templates."<name>"` -- it's not the install path.
+`path` sets the absolute destination and defaults to sops-nix's own `/run/secrets/rendered/<name>`
+convention if left unset. `content`/`file` can't be merged into one field the way `copy`/`weakCopy`
+accept either a string or a path: distinguishing which was given requires checking the value's
+type (`builtins.isString`/`isPath`), and that check forces the value -- which would recurse for
+`content`, since it may interpolate `config.sops.placeholder`, itself only available once sops-nix
+already knows `sops.templates` is non-empty. They're two separately-typed fields instead, and
+`file` takes precedence if both are set. Defaults to `root:root` ownership and `0400` filemode,
+both overridable. Any `sops.secrets` a template's placeholders need can be registered inline via
+its own `secrets` field instead of a separate `sops.secrets.<key>` block:
 
 ```nix
-files.any."/run/caddy/cloudflare.env" = {
-  user = "caddy"; group = "caddy"; filemode = "0400";
-  template.text = ''
-    CF_ZONE=example.com
+files.templates."cloudflare-env" = {
+  path = "/run/caddy/cloudflare.env";
+  user = "caddy"; group = "caddy";
+  content = ''
+    CF_ZONE=${config.sops.placeholder."caddy/cfZone"}
     CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
   '';
+  secrets = {
+    "caddy/cfZone".sopsFile = ./secrets.enc.yaml;
+    "caddy/cloudflareApiToken".sopsFile = ./secrets.enc.yaml;
+  };
 };
 ```
 
@@ -345,9 +350,9 @@ nix flake check
 
 `tests/` is a NixOS VM test (`checks.<system>.vmTest`) that boots a machine wired up with every
 engine at once -- plaintext `copy`/`link` across `files.any`/`root`/`user`/`all`, a single
-sops-encrypted file, an encrypted directory fan-out, owner-from-secret resolution, a templated
-file, and a user/group created from a secret -- then asserts the installed content, mode, and
-owner at each target path. Unlike the `examples/`, which are only checked for evaluation, this
+sops-encrypted file, an encrypted directory fan-out, owner-from-secret resolution, a
+`files.templates` entry, and a user/group created from a secret -- then asserts the installed
+content, mode, and owner at each target path. Unlike the `examples/`, which are only checked for evaluation, this
 actually decrypts secrets and inspects the result, using the same disposable age keypair
 (`tests/keys/test-age-key.txt`) that encrypts `examples/*.enc.yaml`, applied here to the
 placeholder values in `tests/fixtures/*.enc.yaml`.

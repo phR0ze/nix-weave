@@ -1,18 +1,27 @@
-# Templated file -- mixed plaintext + secret fields, via the `template` field shared by every
-# files.any/root/user/all entry (see modules/file-type.nix). The attribute name IS the absolute
-# destination path, same as any other files.any entry.
+# Templated file -- mixed plaintext + secret fields, via the standalone files.templates
+# namespace (see modules/template-type.nix). The attribute name is just an identifier (mirrors
+# sops.templates."<name>"); `path` is the absolute destination path.
 #---------------------------------------------------------------------------------------------------
 { config, ... }:
 {
-  files.any."/run/caddy/cloudflare.env" = {
+  # 1. Create the sops file
+  # sops edit secrets.enc.yaml
+  # caddy:
+  #   cloudflareApiToken: ENC[AES...]
+  #   cfZone: ENC[AES...]
+
+  # 2. Render the template into a file for use, registering the secrets it references inline
+  files.templates."cloudflare-env" = {
+    path = "/run/caddy/cloudflare.env"; # defaults to /run/secrets/rendered/<name> like sops-nix
     user = "caddy";
     group = "caddy";
-    filemode = "0400";
-    template.text = ''
-      CF_ZONE=example.com
+    content = ''
+      CF_ZONE=${config.sops.placeholder."caddy/cfZone"}
       CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
     '';
+    secrets = {
+      "caddy/cfZone".sopsFile = ./secrets.enc.yaml;
+      "caddy/cloudflareApiToken".sopsFile = ./secrets.enc.yaml;
+    };
   };
-
-  sops.secrets."caddy/cloudflareApiToken".sopsFile = ./secrets.enc.yaml;
 }
