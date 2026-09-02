@@ -289,9 +289,9 @@ users.groups.shared = { };
 
 users.fromSecret."svc-account" = {
   sopsFile = ./secrets.enc.yaml;
-  userSecretRef = "provisioned/svcUsername";
-  groupSecretRef = "provisioned/svcGroupname";
-  passwordSecretRef = "provisioned/svcPassword";
+  userSecretRef = "users/user1/name";
+  groupSecretRef = "users/user1/group";
+  passwordSecretRef = "users/user1/pass";
   isNormalUser = true;
   uid = 1500;
   extraGroups = [ "shared" ];
