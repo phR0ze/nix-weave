@@ -45,6 +45,10 @@ let
     ++ lib.optional (entry.passwordSecretRef != null) {
       name = "_users-from-secret/${name}/password";
       value = { inherit (entry) sopsFile format; key = entry.passwordSecretRef; };
+    }
+    ++ lib.optional (entry.passwordHashSecretRef != null) {
+      name = "_users-from-secret/${name}/passwordHash";
+      value = { inherit (entry) sopsFile format; key = entry.passwordHashSecretRef; };
     };
 
   # Positional args for the `create_user` shell function below -- kept positional (rather than
@@ -59,6 +63,10 @@ let
         if entry.passwordSecretRef != null
         then "/run/secrets/_users-from-secret/${name}/password"
         else "";
+      passwordHashFile =
+        if entry.passwordHashSecretRef != null
+        then "/run/secrets/_users-from-secret/${name}/passwordHash"
+        else "";
     in
     [
       "create_user"
@@ -71,6 +79,7 @@ let
       entry.homeMode
       (lib.concatStringsSep "," entry.extraGroups)
       passwordFile
+      passwordHashFile
     ];
 
   createUserScript = pkgs.writeShellScript "nixos-files-create-user" ''
@@ -101,7 +110,8 @@ let
 
     create_user() {
       local user_file="$1" group_file="$2" is_normal="$3" uid="$4" \
-            shell="$5" home="$6" home_mode="$7" extra_groups="$8" password_file="$9"
+            shell="$5" home="$6" home_mode="$7" extra_groups="$8" password_file="$9" \
+            password_hash_file="''${10}"
       local user group
 
       user="$(cat "$user_file")"
@@ -139,6 +149,8 @@ let
 
         if [[ -n "$password_file" ]]; then
           chpasswd <<< "$user:$(cat "$password_file")"
+        elif [[ -n "$password_hash_file" ]]; then
+          chpasswd -e <<< "$user:$(cat "$password_hash_file")"
         fi
 
         [[ "$is_normal" == true ]] && allocate_subid_range "$user"
@@ -169,6 +181,13 @@ in
   };
 
   config = lib.mkIf (entries != { }) {
+    assertions = lib.mapAttrsToList
+      (name: entry: {
+        assertion = !(entry.passwordSecretRef != null && entry.passwordHashSecretRef != null);
+        message = "users.fromSecret.${name}: passwordSecretRef and passwordHashSecretRef are mutually exclusive.";
+      })
+      entries;
+
     sops.secrets = lib.listToAttrs (lib.concatLists (lib.mapAttrsToList toSecrets entries));
 
     system.activationScripts.usersFromSecret = lib.stringAfter [ "setupSecrets" ] ''

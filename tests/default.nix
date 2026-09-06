@@ -104,6 +104,18 @@ pkgs.testers.runNixOSTest {
       uid = 2500;
       extraGroups = [ "shared" ];
     };
+
+    # -- same as above, but the initial password comes pre-hashed (mkpasswd -m sha-512) via
+    # passwordHashSecretRef, so the plaintext password is never decrypted to disk at all --
+    users.fromSecret."secret-hash-account" = {
+      sopsFile = ./fixtures/secrets.enc.yaml;
+      userSecretRef = "provisioned/secretHashUsername";
+      groupSecretRef = "provisioned/secretHashGroupname";
+      passwordHashSecretRef = "provisioned/secretPasswordHash";
+      isNormalUser = true;
+      uid = 2501;
+      extraGroups = [ "shared" ];
+    };
   };
 
   testScript = ''
@@ -168,10 +180,23 @@ pkgs.testers.runNixOSTest {
         machine.succeed("grep -qE '^secretsvc:[0-9]+:65536$' /etc/subuid")
         machine.succeed("grep -qE '^secretsvc:[0-9]+:65536$' /etc/subgid")
 
+    with subtest("user created at activation with a pre-hashed password (passwordHashSecretRef)"):
+        machine.succeed("getent group secrethashgrp")
+        machine.succeed("id secrethashsvc")
+        machine.succeed("test \"$(id -gn secrethashsvc)\" = 'secrethashgrp'")
+        machine.succeed("test \"$(id -u secrethashsvc)\" = '2501'")
+        machine.succeed("id -nG secrethashsvc | grep -qw shared")
+        machine.succeed(
+            "test \"$(getent shadow secrethashsvc | cut -d: -f2)\" = "
+            "'$6$nJlv1.S8eP/OsYJM$9yOxieRtEqDSoaiI3Q0IXgRbnJQwKyKPk9DHj3Y9v68YUdBRXBMrYg4ElCiwmDLLiFEBfSK4YYDgC0UcIcaY60'"
+        )
+        machine.succeed("passwd -S secrethashsvc | grep -q '^secrethashsvc P'")
+
     with subtest("re-running activation is idempotent"):
         machine.succeed("/run/current-system/activate")
         machine.succeed("test \"$(cat /etc/newt/client-secret)\" = 'test-newt-client-secret'")
         machine.succeed("test -s /opt/svc/data-copy")
         machine.succeed("id secretsvc")
+        machine.succeed("id secrethashsvc")
   '';
 }

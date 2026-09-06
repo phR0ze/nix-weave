@@ -101,7 +101,20 @@ with lib.types; attrsOf (submodule (
         description = ''
           Key within sopsFile whose decrypted value is the initial password, like
           users.users.<name>.initialPassword -- applied only when the account is first created,
-          never re-applied or reconciled on later activations.
+          never re-applied or reconciled on later activations. Mutually exclusive with
+          passwordHashSecretRef.
+        '';
+      };
+
+      passwordHashSecretRef = lib.mkOption {
+        type = nullOr str;
+        default = null;
+        description = ''
+          Key within sopsFile whose decrypted value is an already-hashed password (e.g. from
+          `mkpasswd -m sha-512`), like users.users.<name>.hashedPassword -- applied only when the
+          account is first created, never re-applied or reconciled on later activations. Use this
+          instead of passwordSecretRef when the plaintext password shouldn't be decrypted to disk
+          at all, even transiently. Mutually exclusive with passwordSecretRef.
         '';
       };
     };

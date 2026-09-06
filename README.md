@@ -293,6 +293,11 @@ primary group always comes from `groupSecretRef` -- unlike `extraGroups`, its na
 sensitive as the username, so there's no plain `group` escape hatch. `extraGroups` is plain
 supplementary membership in already-declared groups:
 
+If you'd rather not have the plaintext password decrypted to disk at all, even transiently, use
+`passwordHashSecretRef` instead of `passwordSecretRef` -- its secret should already be a hash
+(e.g. `mkpasswd -m sha-512`), mirroring `users.users.<name>.hashedPassword`. The two are mutually
+exclusive on the same entry.
+
 ```nix
 users.groups.shared = { };
 
