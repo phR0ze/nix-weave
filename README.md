@@ -52,10 +52,14 @@ Import ***nixos-files*** and set follows for your nixpkgs
      };
    }
    ```
-2. Install the age key using some form of:
-   1. Create the path on the vm `mkdir -p /var/lib/sops-nix`
-   2. SCP into or out from the VM from/to a known seed system to copy over `key.txt` to that location
-   3. Set permissions `chmod 400 /var/lib/sops-nix/key.txt`
+2. Install the age key. ***nixos-files*** defaults `sops.age.keyFile` to whichever of
+   `/root/.config/sops/age/keys.txt` or `~/.config/sops/age/keys.txt` exists (mirroring sops'
+   own conventional key location), so dropping the key at one of those paths is enough:
+   1. Create the path on the vm `mkdir -p /root/.config/sops/age`
+   2. SCP into or out from the VM from/to a known seed system to copy over `keys.txt` to that location
+   3. Set permissions `chmod 400 /root/.config/sops/age/keys.txt`
+   4. To use a different location instead, set `sops.age.keyFile` explicitly -- it takes priority
+      over the default.
 
 ### Install functions
 ***nixos-files*** provides a number of different ***install functions*** for different purposes.
