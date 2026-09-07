@@ -1,6 +1,6 @@
 # nix-weave
 
-Activation-time NixOS file and secret installation leveraging [sops-nix](https://github.com/Mic92/sops-nix).
+Nix orchestration for build and runtime configuration leveraging [sops-nix](https://github.com/Mic92/sops-nix).
 
 Installs arbitrary files/directories -- plaintext or encrypted -- and renders templated files
 mixing plaintext and secret fields, without ever writing decrypted secret content to the Nix
