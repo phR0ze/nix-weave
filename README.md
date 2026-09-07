@@ -22,7 +22,6 @@ copy/link installation is handled by a small activation script.
   - [Encrypted files](#encrypted-files)
     - [Encrypted file](#encrypted-file)
     - [Encrypted directory](#encrypted-directory)
-    - [Encrypted files with a default sops-nix path](#encrypted-files-with-a-default-sops-nix-path)
   - [Templated files](#templated-files)
   - [User created from a secret](#user-created-from-a-secret)
 - [Running the examples](#running-the-examples)
@@ -72,8 +71,7 @@ sops-nix's own `sops.templates."<name>"`) and the install path is set via its ow
 either as an absolute install path (as usual) **or** as a bare sops-nix identifier with no leading
 `/` (e.g. `"newt/clientSecret"`), in which case there's no install path up front either -- it
 defaults to sops-nix's own `/run/secrets/<name>` convention, exactly like an ordinary
-`sops.secrets."<name>"` left at its default `path`. See
-[Encrypted files with a default sops-nix path](#encrypted-files-with-a-default-sops-nix-path).
+`sops.secrets."<name>"` left at its default `path`. See [Encrypted files](#encrypted-files).
 
 | Install function    | Description
 | ------------------- | ---------------------------------------------------------------------
@@ -231,12 +229,33 @@ When you want to install sensitive files that shouldn't be stored in a decrypted
 nix store you can use the ***encrypted*** content type to reference an encrypted file that will then
 be decrypted at activation time and wrote to the system as directed.
 
-##### Encrypted file
-The file being consumed needs to have first been encrypted with sops.
+`encrypted`/`encryptedDir` are the one case where the attribute name doesn't have to be an
+install path at all: give it as a bare sops-nix identifier (no leading `/`) and there's no install
+path to give up front -- it defaults to sops-nix's own `/run/secrets/<name>` convention, with the
+identifier doubling as the sops key lookup (both default to the same string), exactly like an
+ordinary `config.sops.secrets."<name>"` left at its default path. Giving an absolute path instead
+(a name starting with `/`) overrides that default and installs at the literal path given, same as
+every other `files.any` entry -- useful when something else expects the secret at a specific,
+fixed location. Reference the resolved path either way via `path`, mirroring
+`config.sops.secrets."<name>".path`:
 
 ```nix
-files.any."/etc/newt/client-secret" = {
-  encrypted = { sopsFile = ./secrets.enc.yaml; key = "newt/clientSecret"; };
+systemd.services.newt.serviceConfig.LoadCredential =
+  "client-secret:${config.files.any."newt/clientSecret".path}";
+```
+
+This bare-identifier form is only available to `encrypted`/`encryptedDir` -- plaintext entries
+(`copy`/`weakCopy`/`link`) always require an explicit absolute path, since there's no sops-nix
+default to fall back to.
+
+##### Encrypted file
+The file being consumed needs to have first been encrypted with sops. `encrypted.key` defaults to
+the attribute name, so naming the entry after the sops key (as below) needs no separate `key`
+field; set `encrypted.key` explicitly if you want a different sops key than the name/path used.
+
+```nix
+files.any."newt/clientSecret" = {
+  encrypted.sopsFile = ./secrets.enc.yaml;   # -> /run/secrets/newt/clientSecret
   filemode = "0400";
 };
 ```
@@ -259,37 +278,11 @@ nginx:
 ```
 
 ```nix
-files.any."/etc/nginx/certs" = {
-  encryptedDir = { sopsFile = ./certs.enc.yaml; prefix = "nginx/certs"; };
+files.any."nginx/certs" = {
+  encryptedDir = { sopsFile = ./certs.enc.yaml; prefix = "nginx/certs"; };   # -> /run/secrets/nginx/certs/<leaf>
   filemode = "0400";
 };
 ```
-
-##### Encrypted files with a default sops-nix path
-Sometimes you don't care *where* a secret lands on disk -- you just want it decrypted and to
-reference wherever sops-nix puts it, exactly like using `sops.secrets` directly. For that, give
-`files.any`'s `encrypted`/`encryptedDir` entries a bare identifier instead of an absolute path
-(no leading `/`): the install path is then left unset, so it defaults to sops-nix's own
-`/run/secrets/<name>` convention, with the identifier doubling as the sops key lookup (both
-default to the same string). Set `encrypted.key` explicitly if you want a different sops key
-than the identifier used for the file name/path.
-
-```nix
-files.any."newt/clientSecret".encrypted.sopsFile = ./secrets.enc.yaml;  # -> /run/secrets/newt/clientSecret
-```
-
-Reference the resolved path the same way as any other entry, via `path`:
-
-```nix
-systemd.services.newt.serviceConfig.LoadCredential =
-  "client-secret:${config.files.any."newt/clientSecret".path}";
-```
-
-Giving an absolute path instead (`files.any."/etc/newt/client-secret"`, as in
-[Encrypted file](#encrypted-file) above) overrides that default and installs at the literal path
-given -- the two forms can be mixed freely across different entries. This bare-identifier form is
-only available to `encrypted`/`encryptedDir` -- plaintext entries (`copy`/`weakCopy`/`link`)
-always require an explicit absolute path, since there's no sops-nix default to fall back to.
 
 #### Templated files
 ***files.templates*** is its own standalone install function (like ***users.fromSecret***, not a

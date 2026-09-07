@@ -1,9 +1,11 @@
-# Single encrypted file -- decrypted only at activation, never in the store or git.
+# Single encrypted file -- decrypted only at activation, never in the store or git. The
+# attribute name (no leading "/") doubles as the sops key lookup and defaults the install path
+# to sops-nix's own "/run/secrets/<name>" convention.
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  files.any."/etc/newt/client-secret" = {
-    encrypted = { sopsFile = ./secrets.enc.yaml; key = "newt/clientSecret"; };
+  files.any."newt/clientSecret" = {
+    encrypted.sopsFile = ./secrets.enc.yaml;
     filemode = "0400";
   };
 }

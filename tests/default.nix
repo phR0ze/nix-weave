@@ -44,12 +44,6 @@ pkgs.testers.runNixOSTest {
       copy = ../examples/include/svc/data;
     };
 
-    # -- encrypted: single file, decrypted straight to target by sops-nix --
-    files.any."/etc/newt/client-secret" = {
-      encrypted = { sopsFile = ./fixtures/secrets.enc.yaml; key = "newt/clientSecret"; };
-      filemode = "0400";
-    };
-
     # -- encrypted: bare (no leading "/") identifier with an explicit key override -- no install
     # path given up front, so it defaults to sops-nix's own "/run/secrets/<name>" convention --
     files.any."newt-client-secret" = {
@@ -76,8 +70,9 @@ pkgs.testers.runNixOSTest {
       encrypted.sopsFile = ./fixtures/secrets.enc.yaml;
     };
 
-    # -- encrypted: directory fanned out into one sops.secrets entry per leaf --
-    files.any."/etc/nginx/certs" = {
+    # -- encrypted: directory fanned out into one sops.secrets entry per leaf, bare (no leading
+    # "/") identifier -- each leaf defaults to sops-nix's own "/run/secrets/<name>/<leaf>" path --
+    files.any."nginx/certs" = {
       encryptedDir = { sopsFile = ./fixtures/certs.enc.yaml; prefix = "nginx/certs"; };
       filemode = "0400";
     };
@@ -180,13 +175,13 @@ pkgs.testers.runNixOSTest {
         machine.succeed("test \"$(cat /run/secrets/newt/clientSecret)\" = 'test-newt-client-secret'")
 
     with subtest("sops-nix decrypts a single encrypted file at activation"):
-        machine.succeed("test \"$(cat /etc/newt/client-secret)\" = 'test-newt-client-secret'")
-        machine.succeed("stat -L -c%a /etc/newt/client-secret | grep -qx 400")
+        machine.succeed("test \"$(cat /run/secrets/newt-client-secret)\" = 'test-newt-client-secret'")
+        machine.succeed("stat -L -c%a /run/secrets/newt-client-secret | grep -qx 400")
 
     with subtest("sops-nix fans an encrypted directory out into one secret per leaf"):
-        machine.succeed("test \"$(cat /etc/nginx/certs/server.crt)\" = 'test-server-crt-content'")
-        machine.succeed("test \"$(cat /etc/nginx/certs/server.key)\" = 'test-server-key-content'")
-        machine.succeed("stat -L -c%a /etc/nginx/certs/server.crt | grep -qx 400")
+        machine.succeed("test \"$(cat /run/secrets/nginx/certs/server.crt)\" = 'test-server-crt-content'")
+        machine.succeed("test \"$(cat /run/secrets/nginx/certs/server.key)\" = 'test-server-key-content'")
+        machine.succeed("stat -L -c%a /run/secrets/nginx/certs/server.crt | grep -qx 400")
 
     with subtest("owner resolved from a decrypted secret, never appearing in cleartext config"):
         machine.succeed("stat -c%U /opt/svc/data | grep -qx testsvc")
@@ -227,7 +222,7 @@ pkgs.testers.runNixOSTest {
 
     with subtest("re-running activation is idempotent"):
         machine.succeed("/run/current-system/activate")
-        machine.succeed("test \"$(cat /etc/newt/client-secret)\" = 'test-newt-client-secret'")
+        machine.succeed("test \"$(cat /run/secrets/newt-client-secret)\" = 'test-newt-client-secret'")
         machine.succeed("test -s /opt/svc/data-copy")
         machine.succeed("id secretsvc")
         machine.succeed("id secrethashsvc")
