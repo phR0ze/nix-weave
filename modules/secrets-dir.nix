@@ -25,17 +25,24 @@ let
         sopsFile = entry.encryptedDir.sopsFile;
         prefix = entry.encryptedDir.prefix;
       };
+      # A bare (no leading "/") files.any identifier is used verbatim as each leaf's
+      # sops.secrets name -- entry.path is then just sops-nix's own "/run/secrets/<id>" default
+      # (see _usesDefaultSopsPath in file-type.nix), so `path` below is omitted per-leaf rather
+      # than passed through, letting sops-nix compute the identical "/run/secrets/<id>/<leaf>"
+      # default itself.
+      base = if entry._usesDefaultSopsPath then entry._id else lib.removePrefix "/" entry.path;
     in
     map
       (key: {
-        name = "${lib.removePrefix "/" entry._target}/${relpath entry key}";
+        name = "${base}/${relpath entry key}";
         value = {
           sopsFile = entry.encryptedDir.sopsFile;
           inherit key;
-          path = "${entry._target}/${relpath entry key}";
           owner = ownerStr entry.user;
           group = ownerStr entry.group;
           mode = entry.filemode;
+        } // lib.optionalAttrs (!entry._usesDefaultSopsPath) {
+          path = "${entry.path}/${relpath entry key}";
         };
       })
       keys;

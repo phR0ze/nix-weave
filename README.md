@@ -22,6 +22,7 @@ copy/link installation is handled by a small activation script.
   - [Encrypted files](#encrypted-files)
     - [Encrypted file](#encrypted-file)
     - [Encrypted directory](#encrypted-directory)
+    - [Encrypted files with a default sops-nix path](#encrypted-files-with-a-default-sops-nix-path)
   - [Templated files](#templated-files)
   - [User created from a secret](#user-created-from-a-secret)
 - [Running the examples](#running-the-examples)
@@ -67,6 +68,13 @@ For every `files.<install-function>.<name>` the *name* attribute IS the install 
 separate field to set, **except `files.templates`**, where *name* is just an identifier (mirroring
 sops-nix's own `sops.templates."<name>"`) and the install path is set via its own `path` field.
 
+`files.any`'s `encrypted`/`encryptedDir` entries have one further exception: *name* may be given
+either as an absolute install path (as usual) **or** as a bare sops-nix identifier with no leading
+`/` (e.g. `"newt/clientSecret"`), in which case there's no install path up front either -- it
+defaults to sops-nix's own `/run/secrets/<name>` convention, exactly like an ordinary
+`sops.secrets."<name>"` left at its default `path`. See
+[Encrypted files with a default sops-nix path](#encrypted-files-with-a-default-sops-nix-path).
+
 | Install function    | Description
 | ------------------- | ---------------------------------------------------------------------
 | `files.any`         | installs files at an arbitrary location on disk
@@ -75,6 +83,15 @@ sops-nix's own `sops.templates."<name>"`) and the install path is set via its ow
 | `files.all`         | installs files for both `/root/<name>` and `$HOME/<name>` for every real user
 | `files.templates`   | renders a file mixing plaintext and secret fields via sops-nix's template engine
 | `users.fromSecret`  | installs a new user/group idempotently from secrets to avoid exposing PII
+
+Every entry also exposes a read-only `path` field with the final resolved install path -- mirroring
+`config.sops.secrets."<name>".path` -- so it can be referenced as an input elsewhere in your config
+(e.g. a systemd unit's `EnvironmentFile`) rather than duplicating the path as a separate string:
+
+```nix
+systemd.services.cloudflare-env-check.serviceConfig.EnvironmentFile =
+  config.files.templates."cloudflare-env".path;
+```
 
 ### Content type and ownership
 Ownership in this sense means who is responsible for the lifecycle of the files. If the files are
@@ -247,6 +264,32 @@ files.any."/etc/nginx/certs" = {
   filemode = "0400";
 };
 ```
+
+##### Encrypted files with a default sops-nix path
+Sometimes you don't care *where* a secret lands on disk -- you just want it decrypted and to
+reference wherever sops-nix puts it, exactly like using `sops.secrets` directly. For that, give
+`files.any`'s `encrypted`/`encryptedDir` entries a bare identifier instead of an absolute path
+(no leading `/`): the install path is then left unset, so it defaults to sops-nix's own
+`/run/secrets/<name>` convention, with the identifier doubling as the sops key lookup (both
+default to the same string). Set `encrypted.key` explicitly if you want a different sops key
+than the identifier used for the file name/path.
+
+```nix
+files.any."newt/clientSecret".encrypted.sopsFile = ./secrets.enc.yaml;  # -> /run/secrets/newt/clientSecret
+```
+
+Reference the resolved path the same way as any other entry, via `path`:
+
+```nix
+systemd.services.newt.serviceConfig.LoadCredential =
+  "client-secret:${config.files.any."newt/clientSecret".path}";
+```
+
+Giving an absolute path instead (`files.any."/etc/newt/client-secret"`, as in
+[Encrypted file](#encrypted-file) above) overrides that default and installs at the literal path
+given -- the two forms can be mixed freely across different entries. This bare-identifier form is
+only available to `encrypted`/`encryptedDir` -- plaintext entries (`copy`/`weakCopy`/`link`)
+always require an explicit absolute path, since there's no sops-nix default to fall back to.
 
 #### Templated files
 ***files.templates*** is its own standalone install function (like ***users.fromSecret***, not a

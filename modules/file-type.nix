@@ -137,13 +137,22 @@ let
           };
         };
 
-        # -- internal, computed --
-        _target = lib.mkOption {
+        # -- read-only, computed --
+        path = lib.mkOption {
           type = str;
-          internal = true;
-          description = "Absolute destination path: prefix + attribute name. Not settable directly.";
+          description = ''
+            Absolute destination path: prefix + attribute name. Not settable directly -- mirrors
+            config.sops.secrets."<name>".path, so this can be referenced as an input elsewhere
+            (e.g. a systemd unit's EnvironmentFile) once the entry is installed.
+
+            files.any's encrypted/encryptedDir entries are the one exception: their attribute
+            name may instead be a bare sops-nix identifier (no leading "/"), in which case this
+            defaults to sops-nix's own "/run/secrets/<name>" convention rather than requiring an
+            explicit path up front -- see _usesDefaultSopsPath.
+          '';
         };
 
+        # -- internal, computed --
         source = lib.mkOption {
           type = nullOr path;
           internal = true;
@@ -167,6 +176,24 @@ let
           internal = true;
           description = "Which engine this entry is installed through.";
         };
+
+        _id = lib.mkOption {
+          type = str;
+          internal = true;
+          description = "The raw attribute name, before any prefix/path resolution.";
+        };
+
+        _usesDefaultSopsPath = lib.mkOption {
+          type = bool;
+          internal = true;
+          description = ''
+            True only for a files.any encrypted/encryptedDir entry whose attribute name was
+            given without a leading "/" -- `path` is then sops-nix's own default rather than an
+            explicit override, so secrets.nix/secrets-dir.nix must omit `path` from the
+            generated sops.secrets entry (letting sops-nix compute it) instead of passing it
+            through verbatim.
+          '';
+        };
       };
 
       config =
@@ -182,19 +209,37 @@ let
             { name = "encryptedDir.sopsFile"; isDefined = options.encryptedDir.sopsFile.isDefined; }
           ];
           tooMany = lib.length setMechanisms > 1;
-        in
-        {
-          _target =
-            if requireAbsolute && !(lib.hasPrefix "/" name) then
-              throw "files.any.\"${name}\" must be an absolute path starting with \"/\" (e.g. files.any.\"/etc/asound.conf\")"
-            else "${prefix}${name}";
 
-          _engine =
+          engine =
             if tooMany then
               throw "files.*.\"${name}\" sets more than one install mechanism (${lib.concatMapStringsSep ", " (m: m.name) setMechanisms}) -- set exactly one of copy/weakCopy/link/encrypted.sopsFile/encryptedDir.sopsFile"
             else if options.encrypted.sopsFile.isDefined then "encrypted"
             else if options.encryptedDir.sopsFile.isDefined then "encryptedDir"
             else "plaintext";
+
+          # Only files.any's encrypted/encryptedDir entries may skip the leading "/" -- plaintext
+          # entries (copy/weakCopy/link) always need a real install path, and files.root/user/all
+          # are prefix-relative by design so "absolute or not" doesn't apply to them.
+          isSopsEngine = engine == "encrypted" || engine == "encryptedDir";
+          usesDefaultSopsPath = requireAbsolute && isSopsEngine && !(lib.hasPrefix "/" name);
+        in
+        {
+          path =
+            if lib.hasPrefix "/" name then "${prefix}${name}"
+            else if usesDefaultSopsPath then
+              # Mirrors sops-nix's own sops.secrets."<name>".path default -- secrets.nix/
+              # secrets-dir.nix likewise omit `path` in this case so sops-nix computes the exact
+              # same value, rather than risking drift by duplicating its logic independently.
+              "/run/secrets/${name}"
+            else if requireAbsolute then
+              throw "files.any.\"${name}\" must be an absolute path starting with \"/\" (e.g. files.any.\"/etc/asound.conf\") -- an encrypted/encryptedDir entry may instead omit the leading \"/\" to use the name as a sops-nix identifier, defaulting to /run/secrets/<name>"
+            else "${prefix}${name}";
+
+          _id = name;
+
+          _usesDefaultSopsPath = usesDefaultSopsPath;
+
+          _engine = engine;
 
           _kind = if options.link.isDefined then "link" else "copy";
 

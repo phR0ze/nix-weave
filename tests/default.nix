@@ -50,6 +50,32 @@ pkgs.testers.runNixOSTest {
       filemode = "0400";
     };
 
+    # -- encrypted: bare (no leading "/") identifier with an explicit key override -- no install
+    # path given up front, so it defaults to sops-nix's own "/run/secrets/<name>" convention --
+    files.any."newt-client-secret" = {
+      encrypted = { sopsFile = ./fixtures/secrets.enc.yaml; key = "newt/clientSecret"; };
+      filemode = "0400";
+    };
+
+    # -- consume files.any."newt-client-secret".path as an input elsewhere, mirroring
+    # config.sops.secrets."<name>".path, to prove it resolves to the same real (defaulted) path --
+    systemd.services.newt-client-secret-check = {
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.bash}/bin/bash -c 'cat ${config.files.any."newt-client-secret".path} > /run/newt-client-secret-check'";
+      };
+    };
+
+    # -- encrypted: bare (no leading "/") identifier -- no install path given up front, so it
+    # defaults to sops-nix's own "/run/secrets/<name>" convention, with the identifier doubling
+    # as the sops key lookup (both default to "newt/clientSecret") exactly like an ordinary
+    # config.sops.secrets."newt/clientSecret" left at its default path --
+    files.any."newt/clientSecret" = {
+      encrypted.sopsFile = ./fixtures/secrets.enc.yaml;
+    };
+
     # -- encrypted: directory fanned out into one sops.secrets entry per leaf --
     files.any."/etc/nginx/certs" = {
       encryptedDir = { sopsFile = ./fixtures/certs.enc.yaml; prefix = "nginx/certs"; };
@@ -145,6 +171,13 @@ pkgs.testers.runNixOSTest {
 
     with subtest("single file installed via copy (owned, force-overwritten)"):
         machine.succeed("grep -q 'placeholder service data file' /opt/svc/data-copy")
+
+    with subtest("files.any.\"newt-client-secret\".path resolves to the real decrypted file when used as an input elsewhere"):
+        machine.wait_for_unit("newt-client-secret-check.service")
+        machine.succeed("test \"$(cat /run/newt-client-secret-check)\" = 'test-newt-client-secret'")
+
+    with subtest("files.any.\"newt/clientSecret\" (bare identifier, no leading /) defaults to sops-nix's own /run/secrets/<name> path"):
+        machine.succeed("test \"$(cat /run/secrets/newt/clientSecret)\" = 'test-newt-client-secret'")
 
     with subtest("sops-nix decrypts a single encrypted file at activation"):
         machine.succeed("test \"$(cat /etc/newt/client-secret)\" = 'test-newt-client-secret'")

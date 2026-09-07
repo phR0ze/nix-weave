@@ -9,7 +9,7 @@ let
   ownerStr = v: if builtins.isString v then v else "root";
 
   toParentDir = e: {
-    dir = builtins.dirOf e._target;
+    dir = builtins.dirOf e.path;
     mode = e.dirmode;
     user = ownerStr e.user;
     group = ownerStr e.group;

@@ -30,9 +30,17 @@ in
       description = ''
         Files installed at an arbitrary absolute path. The attribute name must start with "/"
         (e.g. "/etc/asound.conf") -- unlike files.root, no prefix is applied automatically.
+
+        The one exception is an encrypted/encryptedDir entry: its attribute name may instead be
+        a bare sops-nix identifier with no leading "/" (e.g. "newt/clientSecret"), in which case
+        no install path is required up front -- it defaults to sops-nix's own convention
+        ("/run/secrets/<name>", resolvable afterwards via the entry's `path`), exactly like an
+        ordinary config.sops.secrets."<name>" left at its default path. Giving an absolute name
+        instead overrides that default and installs at the literal path given, same as before.
       '';
       example = ''
         files.any."/etc/asound.conf".copy = "autospawn=no";
+        files.any."newt/clientSecret".encrypted.sopsFile = ./secrets.enc.yaml; # -> /run/secrets/newt/clientSecret
       '';
     };
 

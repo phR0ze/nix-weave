@@ -14,16 +14,16 @@ let
   realUsers = lib.filterAttrs (_: u: u.isNormalUser) config.users.users;
 
   checkRelative = entry:
-    if lib.hasPrefix "/" entry._target then
-      throw "files.user/files.all name \"${entry._target}\" must be relative to a user's home directory (no leading /) -- use files.any/files.root for absolute paths"
+    if lib.hasPrefix "/" entry.path then
+      throw "files.user/files.all name \"${entry.path}\" must be relative to a user's home directory (no leading /) -- use files.any/files.root for absolute paths"
     else entry;
 
-  # One instance of `entry` per real user, _target rewritten to that user's home directory.
+  # One instance of `entry` per real user, path rewritten to that user's home directory.
   expandPerUser = attrs: lib.concatMap
     (entry:
       let e = checkRelative entry; in
       lib.mapAttrsToList
-        (uname: u: e // { _target = "${u.home}/${e._target}"; user = uname; group = u.group; })
+        (uname: u: e // { path = "${u.home}/${e.path}"; user = uname; group = u.group; })
         realUsers)
     (lib.attrValues attrs);
 
@@ -31,7 +31,7 @@ let
   allRootVariant = map
     (entry:
       let e = checkRelative entry; in
-      e // { user = "root"; group = "root"; _target = "/root/${e._target}"; })
+      e // { user = "root"; group = "root"; path = "/root/${e.path}"; })
     (lib.attrValues config.files.all);
 
   # files.root is always root:root -- force it here rather than merely defaulting to it in
