@@ -31,11 +31,11 @@
         ];
       };
     in {
-      # Bundles sops-nix's own module alongside nixos-files' -- consumers only need to import
+      # Bundles sops-nix's own module alongside nix-weave's -- consumers only need to import
       # this one output. If a consumer also imports sops-nix.nixosModules.sops directly
       # themselves (e.g. for their own unrelated sops.secrets), NixOS dedupes identical-path
       # module imports automatically, but only if both resolve to the exact same sops-nix input
-      # -- pin `nixos-files.inputs.sops-nix.follows = "sops-nix";` in the consumer's own flake if
+      # -- pin `nix-weave.inputs.sops-nix.follows = "sops-nix";` in the consumer's own flake if
       # they need that guarantee (see README).
       nixosModules.default = {
         imports = [
@@ -64,7 +64,7 @@
 
           vmTest = import ./tests {
             inherit pkgs;
-            nixos-files = self.nixosModules.default;
+            nix-weave = self.nixosModules.default;
           };
         });
     };

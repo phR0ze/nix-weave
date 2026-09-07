@@ -1,4 +1,4 @@
-# Small pure(ish) helpers shared across the nixos-files modules.
+# Small pure(ish) helpers shared across the nix-weave modules.
 #
 # `pkgs` is only required for the yaml-reading helpers (`fromYAML`, `sopsKeys` with a
 # yaml-format file) since converting yaml -> json requires a derivation build. Callers

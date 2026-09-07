@@ -1,4 +1,4 @@
-# NixOS VM test exercising every nixos-files engine end-to-end: plaintext copy/link
+# NixOS VM test exercising every nix-weave engine end-to-end: plaintext copy/link
 # fanned out across files.any/root/user/all, sops-nix single-file and directory decryption,
 # owner-from-secret resolution, templated (mixed plaintext + secret) content, and a system
 # user/group created from decrypted secret values. Decrypts
@@ -6,15 +6,15 @@
 # sops-nix, since the whole point is to prove the generated sops.secrets/sops.templates wiring
 # actually decrypts and lands at the right path/mode/owner.
 #---------------------------------------------------------------------------------------------------
-{ pkgs, nixos-files }:
+{ pkgs, nix-weave }:
 pkgs.testers.runNixOSTest {
-  name = "nixos-files";
+  name = "nix-weave";
 
   nodes.machine = { config, pkgs, ... }: {
-    imports = [ nixos-files ];
+    imports = [ nix-weave ];
 
-    sops.age.keyFile = "/etc/nixos-files-test-key.txt";
-    environment.etc."nixos-files-test-key.txt" = {
+    sops.age.keyFile = "/etc/nix-weave-test-key.txt";
+    environment.etc."nix-weave-test-key.txt" = {
       source = ./keys/test-age-key.txt;
       mode = "0400";
     };
@@ -30,7 +30,7 @@ pkgs.testers.runNixOSTest {
 
     # -- plaintext: files.root / files.any (string content via copy) --
     files.root.".dircolors".copy = "TERM *256color\n";
-    files.any."/etc/example/hello".copy = "hello from nixos-files\n";
+    files.any."/etc/example/hello".copy = "hello from nix-weave\n";
 
     # -- plaintext: files.user / files.all, fanned out per real user --
     files.user.".config/example.conf".copy = "example=1\n";
@@ -143,7 +143,7 @@ pkgs.testers.runNixOSTest {
     with subtest("plain text file via files.root / files.any"):
         machine.succeed("test \"$(cat /root/.dircolors)\" = 'TERM *256color'")
         machine.succeed("stat -c%U:%G:%a /root/.dircolors | grep -qx 'root:root:644'")
-        machine.succeed("test \"$(cat /etc/example/hello)\" = 'hello from nixos-files'")
+        machine.succeed("test \"$(cat /etc/example/hello)\" = 'hello from nix-weave'")
 
     with subtest("plain text file via files.user, fanned out per real user"):
         machine.succeed("test \"$(cat /home/alice/.config/example.conf)\" = 'example=1'")

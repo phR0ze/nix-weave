@@ -82,7 +82,7 @@ let
       passwordHashFile
     ];
 
-  createUserScript = pkgs.writeShellScript "nixos-files-create-user" ''
+  createUserScript = pkgs.writeShellScript "nix-weave-create-user" ''
     set -euo pipefail
 
     # Mirrors update-users-groups.pl's autoSubUidGidRange allocation: same 100000-start,
@@ -105,7 +105,7 @@ let
         fi
         start=$((start + step))
       done
-      echo "nixos-files: warning: no free subuid/subgid range for '$user'" >&2
+      echo "nix-weave: warning: no free subuid/subgid range for '$user'" >&2
     }
 
     create_user() {

@@ -65,7 +65,7 @@ let
       anyFiles}
   '';
 
-  installScript = pkgs.writeShellScript "nixos-files-install" (lib.fileContents ./install);
+  installScript = pkgs.writeShellScript "nix-weave-install" (lib.fileContents ./install);
 
   usesSecretOwner = lib.any (e: !(builtins.isString e.user) || !(builtins.isString e.group)) anyFiles;
 in

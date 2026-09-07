@@ -1,4 +1,4 @@
-# nixos-files entry point: declares only nixos-files' own options/config (writes into
+# nix-weave entry point: declares only nix-weave's own options/config (writes into
 # config.sops.secrets/config.sops.templates, never re-declares them). sops-nix's own module is
 # bundled alongside this one at the flake level -- see flake.nix's `nixosModules.default`, not
 # here, since this file has no access to the sops-nix flake input.

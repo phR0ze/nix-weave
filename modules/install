@@ -3,7 +3,7 @@ set -euo pipefail
 shopt -s extglob
 
 # --------------------------------------------------------------------------------------------------
-# Install the plaintext files/directories tracked in a nixos-files filesPackage.
+# Install the plaintext files/directories tracked in a nix-weave filesPackage.
 #
 # Usage:
 #   ./install STORE_PATH NIX_PATH

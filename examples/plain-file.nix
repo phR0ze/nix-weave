@@ -4,7 +4,7 @@
 {
   files.root.".dircolors".copy = "TERM *256color\n";
 
-  files.any."/etc/example/hello".copy = "hello from nixos-files\n";
+  files.any."/etc/example/hello".copy = "hello from nix-weave\n";
 
   # files.user/files.all install for every real (isNormalUser) account -- here, "alice" and "bob".
   users.groups.alice = { };

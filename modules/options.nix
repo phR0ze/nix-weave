@@ -8,7 +8,7 @@
 #
 # files.user/files.all entries' attribute names are home-relative (e.g. ".dircolors", not
 # "/root/.dircolors") and get expanded into one instance per real user (every
-# config.users.users entry with isNormalUser = true) in collect.nix -- nixos-files has no
+# config.users.users entry with isNormalUser = true) in collect.nix -- nix-weave has no
 # notion of a single "primary" user. Any `user`/`group` set on a files.user/files.all entry is
 # ignored; the real per-user (or root, for files.all's root copy) owner is always used.
 #

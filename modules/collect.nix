@@ -6,7 +6,7 @@
 # files.all entries are home-relative and get expanded here into one instance per real user
 # (every config.users.users entry with isNormalUser = true); files.all additionally gets one
 # root-owned /root/<name> instance. This is the one place that knows about the "real users"
-# concept -- nixos-files itself has no notion of a single "primary" user.
+# concept -- nix-weave itself has no notion of a single "primary" user.
 #---------------------------------------------------------------------------------------------------
 { lib }:
 { config }:

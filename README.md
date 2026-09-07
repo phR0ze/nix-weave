@@ -1,4 +1,4 @@
-# nixos-files
+# nix-weave
 
 Activation-time NixOS file and secret installation leveraging [sops-nix](https://github.com/Mic92/sops-nix).
 
@@ -31,28 +31,28 @@ copy/link installation is handled by a small activation script.
 ## Overview
 
 ### Getting started
-Import ***nixos-files*** and set follows for your nixpkgs
+Import ***nix-weave*** and set follows for your nixpkgs
 
-1. Modify your configuration to use nixos-files
+1. Modify your configuration to use nix-weave
    ```nix
    {
      inputs = {
        nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-       nixos-files.url = "github:phR0ze/nixos-files";
-       nixos-files.inputs.nixpkgs.follows = "nixpkgs";
+       nix-weave.url = "github:phR0ze/nix-weave";
+       nix-weave.inputs.nixpkgs.follows = "nixpkgs";
      };
    
-     outputs = { nixpkgs, nixos-files, ... }: {
+     outputs = { nixpkgs, nix-weave, ... }: {
        nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
          modules = [
-           nixos-files.nixosModules.default
+           nix-weave.nixosModules.default
            ./configuration.nix
          ];
        };
      };
    }
    ```
-2. Install the age key. ***nixos-files*** defaults `sops.age.keyFile` to whichever of
+2. Install the age key. ***nix-weave*** defaults `sops.age.keyFile` to whichever of
    `/root/.config/sops/age/keys.txt` or `~/.config/sops/age/keys.txt` exists (mirroring sops'
    own conventional key location), so dropping the key at one of those paths is enough:
    1. Create the path on the vm `mkdir -p /root/.config/sops/age`
@@ -62,7 +62,7 @@ Import ***nixos-files*** and set follows for your nixpkgs
       over the default.
 
 ### Install functions
-***nixos-files*** provides a number of different ***install functions*** for different purposes.
+***nix-weave*** provides a number of different ***install functions*** for different purposes.
 For every `files.<install-function>.<name>` the *name* attribute IS the install path -- there's no
 separate field to set, **except `secret.templates`/`secret.files`**, where *name* is just an
 identifier (mirroring sops-nix's own `sops.templates."<name>"`/`sops.secrets."<name>"`) rather
@@ -96,9 +96,9 @@ systemd.services.cloudflare-env-check.serviceConfig.EnvironmentFile =
 
 ### Content type and ownership
 Ownership in this sense means who is responsible for the lifecycle of the files. If the files are
-considered ***owned*** then nixos-files will manage the lifecycle and remove the file when no longer
+considered ***owned*** then nix-weave will manage the lifecycle and remove the file when no longer
 specified in the configuration or overwrite on each activation with the specified content from the
-configuration to ensure its always correct. If ***unowned*** then nixos-files will ensure the file is
+configuration to ensure its always correct. If ***unowned*** then nix-weave will ensure the file is
 installed if it doesn't exist and not touch it after that.
 
 The various content types/modes below have a specific ownership type they evoke.
@@ -173,10 +173,10 @@ files.user.".ssh/id_ed25519" = {
 ## Usage
 
 ### Dedupe sops-nix
-If you also use sops-nix directly yourself (e.g. for `sops.secrets` unrelated to nixos-files),
+If you also use sops-nix directly yourself (e.g. for `sops.secrets` unrelated to nix-weave),
 you can still import `sops-nix.nixosModules.sops` in your own `modules` list -- NixOS dedupes
 identical module imports automatically, but only if both resolve to the exact same sops-nix
-input. Pin `nixos-files.inputs.sops-nix.follows = "sops-nix";` (alongside declaring your own
+input. Pin `nix-weave.inputs.sops-nix.follows = "sops-nix";` (alongside declaring your own
 `sops-nix.url` input) to guarantee that:
 
 ```nix
@@ -187,16 +187,16 @@ input. Pin `nixos-files.inputs.sops-nix.follows = "sops-nix";` (alongside declar
     sops-nix.url = "github:Mic92/sops-nix";
     sops-nix.inputs.nixpkgs.follows = "nixpkgs";
 
-    nixos-files.url = "github:phR0ze/nixos-files";
-    nixos-files.inputs.nixpkgs.follows = "nixpkgs";
-    nixos-files.inputs.sops-nix.follows = "sops-nix";
+    nix-weave.url = "github:phR0ze/nix-weave";
+    nix-weave.inputs.nixpkgs.follows = "nixpkgs";
+    nix-weave.inputs.sops-nix.follows = "sops-nix";
   };
 
-  outputs = { nixpkgs, sops-nix, nixos-files, ... }: {
+  outputs = { nixpkgs, sops-nix, nix-weave, ... }: {
     nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
       modules = [
         sops-nix.nixosModules.sops
-        nixos-files.nixosModules.default
+        nix-weave.nixosModules.default
         ./configuration.nix
       ];
     };
