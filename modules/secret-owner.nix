@@ -18,9 +18,7 @@ let
     lib.optional (!(builtins.isString ref)) {
       name = "_files-owner/${filesLib.ownerSecretId entry.path}/${field}";
       value = {
-        sopsFile =
-          if ref.sopsFile != null then ref.sopsFile
-          else entry.encrypted.sopsFile;
+        sopsFile = ref.sopsFile;
         key = ref.secretRef;
       };
     };

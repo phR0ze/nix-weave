@@ -4,8 +4,5 @@
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  files.any."newt/clientSecret" = {
-    encrypted.sopsFile = ./secrets.enc.yaml;
-    filemode = "0400";
-  };
+  files.secrets."newt/clientSecret".encrypted.sopsFile = ./secrets.enc.yaml;
 }

@@ -10,7 +10,7 @@ let
   filesLib = import ./lib.nix { inherit lib; };
   collect = import ./collect.nix { inherit lib; };
 
-  anyFiles = collect { inherit config; engine = "plaintext"; };
+  anyFiles = collect { inherit config; };
 
   ownerLiteral = entry: field: ownerRef:
     if builtins.isString ownerRef

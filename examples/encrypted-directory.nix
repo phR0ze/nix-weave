@@ -4,8 +4,5 @@
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  files.any."nginx/certs" = {
-    encryptedDir = { sopsFile = ./certs.enc.yaml; prefix = "nginx/certs"; };
-    filemode = "0400";
-  };
+  files.secrets."nginx/certs".encryptedDir = { sopsFile = ./certs.enc.yaml; prefix = "nginx/certs"; };
 }

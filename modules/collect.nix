@@ -1,4 +1,6 @@
-# Shared helper: flatten files.any/root/user/all into one list of enabled entries.
+# Shared helper: flatten files.any/root/user/all into one list of enabled entries. Every entry
+# is plaintext (copy/weakCopy/link) by construction -- encrypted/encryptedDir live in their own
+# standalone files.secrets namespace instead (see secret-type.nix), not in this shared type.
 #
 # files.any/files.root entries are absolute-path, single-instance as declared. files.user/
 # files.all entries are home-relative and get expanded here into one instance per real user
@@ -7,10 +9,8 @@
 # concept -- nixos-files itself has no notion of a single "primary" user.
 #---------------------------------------------------------------------------------------------------
 { lib }:
-{ config, engine ? null }:
+{ config }:
 let
-  matches = e: e.enable && (engine == null || e._engine == engine);
-
   realUsers = lib.filterAttrs (_: u: u.isNormalUser) config.users.users;
 
   checkRelative = entry:
@@ -40,7 +40,7 @@ let
     (entry: entry // { user = "root"; group = "root"; })
     (lib.attrValues config.files.root);
 in
-lib.filter matches (lib.concatLists [
+lib.filter (e: e.enable) (lib.concatLists [
   (lib.attrValues config.files.any)
   rootFiles
   (expandPerUser config.files.user)

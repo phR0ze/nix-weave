@@ -64,23 +64,26 @@ Import ***nixos-files*** and set follows for your nixpkgs
 ### Install functions
 ***nixos-files*** provides a number of different ***install functions*** for different purposes.
 For every `files.<install-function>.<name>` the *name* attribute IS the install path -- there's no
-separate field to set, **except `files.templates`**, where *name* is just an identifier (mirroring
-sops-nix's own `sops.templates."<name>"`) and the install path is set via its own `path` field.
-
-`files.any`'s `encrypted`/`encryptedDir` entries have one further exception: *name* may be given
-either as an absolute install path (as usual) **or** as a bare sops-nix identifier with no leading
-`/` (e.g. `"newt/clientSecret"`), in which case there's no install path up front either -- it
-defaults to sops-nix's own `/run/secrets/<name>` convention, exactly like an ordinary
-`sops.secrets."<name>"` left at its default `path`. See [Encrypted files](#encrypted-files).
+separate field to set, **except `files.templates`/`files.secrets`**, where *name* is just an
+identifier (mirroring sops-nix's own `sops.templates."<name>"`/`sops.secrets."<name>"`) rather
+than necessarily being one. See [Templated files](#templated-files) and
+[Encrypted files](#encrypted-files).
 
 | Install function    | Description
 | ------------------- | ---------------------------------------------------------------------
-| `files.any`         | installs files at an arbitrary location on disk
-| `files.root`        | installs files relative to `/root/`
-| `files.user`        | installs files for all real users i.e. `isNormalUser = true`
-| `files.all`         | installs files for both `/root/<name>` and `$HOME/<name>` for every real user
+| `files.any`         | installs plaintext files at an arbitrary location on disk
+| `files.root`        | installs plaintext files relative to `/root/`
+| `files.user`        | installs plaintext files for all real users i.e. `isNormalUser = true`
+| `files.all`         | installs plaintext files for both `/root/<name>` and `$HOME/<name>` for every real user
+| `files.secrets`     | decrypts a sops-encrypted file/directory straight to the target via sops-nix's own `sops.secrets`
 | `files.templates`   | renders a file mixing plaintext and secret fields via sops-nix's template engine
 | `users.fromSecret`  | installs a new user/group idempotently from secrets to avoid exposing PII
+
+> [!NOTE]
+> `files.secret` (singular, [an alias for `config.sops.placeholder`](#templated-files)) and
+> `files.secrets` (plural, this install function) are two different options -- easy to conflate
+> by name, but unrelated: one references a value inside template content, the other installs a
+> decrypted file/directory.
 
 Every entry also exposes a read-only `path` field with the final resolved install path -- mirroring
 `config.sops.secrets."<name>".path` -- so it can be referenced as an input elsewhere in your config
@@ -102,11 +105,12 @@ The various content types below have a specific ownership type they evoke.
 `copy`/`link`/`encrypted`/`encryptedDir` (and `files.templates` entries) are all **owned**.
 `weakCopy` is the only **unowned** case.
 
-`copy`/`weakCopy`/`link` accept either a ***string*** or a ***path*** -- a string is rendered to
-a Nix store path first (not necessarily ASCII/text, and always a single file -- a directory tree
-requires a path), a path (file, or whole directory for `link`) is used directly. `encrypted`/
-`encryptedDir` instead always take a `sopsFile` path, decrypted straight to the target by
-sops-nix -- no plaintext ever touches the Nix store or git:
+`copy`/`weakCopy`/`link` are `files.any`/`root`/`user`/`all`'s content types: they accept either a
+***string*** or a ***path*** -- a string is rendered to a Nix store path first (not necessarily
+ASCII/text, and always a single file -- a directory tree requires a path), a path (file, or whole
+directory for `link`) is used directly. `encrypted`/`encryptedDir` are `files.secrets`'s content
+types instead: they always take a `sopsFile` path, decrypted straight to the target by sops-nix --
+no plaintext ever touches the Nix store or git:
 
 | Content types   | Behavior                                                                         |
 | --------------- | -------------------------------------------------------------------------------- |
@@ -124,6 +128,8 @@ the option to then override in some cases.
 * `files.root` - defaults to `root:root` and can not be overridden
 * `files.user` - defaults to the implicated user and can not be overridden
 * `files.all` - defaults to the implicated user and can not be overridden
+* `files.secrets` - defaults to `root:root` and ***allows for overriding user and group*** (plain
+  strings only -- no secretRef support, since sops-nix's own ownership fields don't support it)
 * `files.templates` - defaults to `root:root` and ***allows for overriding user and group***
 
 The following provides examples of overridding the user and group for the ***any*** install function.
@@ -225,28 +231,29 @@ files.any."/opt/svc/data" = {
 ```
 
 #### Encrypted files
-When you want to install sensitive files that shouldn't be stored in a decrypted state in the repo or
-nix store you can use the ***encrypted*** content type to reference an encrypted file that will then
-be decrypted at activation time and wrote to the system as directed.
+***files.secrets*** is its own standalone install function (like ***users.fromSecret***/
+***files.templates***, not a field on `files.any`/`root`/`user`/`all`, which are plaintext-only)
+for content decrypted straight from a sops-encrypted source via sops-nix's own `sops.secrets`.
 
-`encrypted`/`encryptedDir` are the one case where the attribute name doesn't have to be an
-install path at all: give it as a bare sops-nix identifier (no leading `/`) and there's no install
-path to give up front -- it defaults to sops-nix's own `/run/secrets/<name>` convention, with the
-identifier doubling as the sops key lookup (both default to the same string), exactly like an
-ordinary `config.sops.secrets."<name>"` left at its default path. Giving an absolute path instead
-(a name starting with `/`) overrides that default and installs at the literal path given, same as
-every other `files.any` entry -- useful when something else expects the secret at a specific,
-fixed location. Reference the resolved path either way via `path`, mirroring
-`config.sops.secrets."<name>".path`:
+The attribute name is a sops-nix identifier, not necessarily an install path: give it as a bare
+identifier (no leading `/`) and there's no install path to give up front -- it defaults to
+sops-nix's own `/run/secrets/<name>` convention, with the identifier doubling as the sops key
+lookup (both default to the same string), exactly like an ordinary `config.sops.secrets."<name>"`
+left at its default path. Giving an absolute path instead (a name starting with `/`) overrides
+that default and installs at the literal path given -- useful when something else expects the
+secret at a specific, fixed location. Reference the resolved path either way via `path`,
+mirroring `config.sops.secrets."<name>".path`:
 
 ```nix
 systemd.services.newt.serviceConfig.LoadCredential =
-  "client-secret:${config.files.any."newt/clientSecret".path}";
+  "client-secret:${config.files.secrets."newt/clientSecret".path}";
 ```
 
-This bare-identifier form is only available to `encrypted`/`encryptedDir` -- plaintext entries
-(`copy`/`weakCopy`/`link`) always require an explicit absolute path, since there's no sops-nix
-default to fall back to.
+> [!NOTE]
+> `files.secrets."<name>"` (plural, this install function) installs a decrypted file/directory.
+> `files.secret."<key>"` (singular, [an alias for `config.sops.placeholder`](#templated-files))
+> references a decrypted value from inside `files.templates` content. Easy to conflate by name --
+> they're unrelated options.
 
 ##### Encrypted file
 The file being consumed needs to have first been encrypted with sops. `encrypted.key` defaults to
@@ -254,10 +261,7 @@ the attribute name, so naming the entry after the sops key (as below) needs no s
 field; set `encrypted.key` explicitly if you want a different sops key than the name/path used.
 
 ```nix
-files.any."newt/clientSecret" = {
-  encrypted.sopsFile = ./secrets.enc.yaml;   # -> /run/secrets/newt/clientSecret
-  filemode = "0400";
-};
+files.secrets."newt/clientSecret".encrypted.sopsFile = ./secrets.enc.yaml;   # -> /run/secrets/newt/clientSecret
 ```
 
 ##### Encrypted directory
@@ -278,10 +282,10 @@ nginx:
 ```
 
 ```nix
-files.any."nginx/certs" = {
-  encryptedDir = { sopsFile = ./certs.enc.yaml; prefix = "nginx/certs"; };   # -> /run/secrets/nginx/certs/<leaf>
-  filemode = "0400";
-};
+files.secrets."nginx/certs".encryptedDir = {
+  sopsFile = ./certs.enc.yaml;
+  prefix = "nginx/certs";
+};   # -> /run/secrets/nginx/certs/<leaf>
 ```
 
 #### Templated files
@@ -320,8 +324,8 @@ files.templates."cloudflare-env" = {
 `files.templates` `content`/`file`, since that's the only place sops-nix actually substitutes it
 at activation time), just kept under the `files.*` namespace instead of reaching into `sops.*`
 directly. It works for any `config.sops.secrets` entry, however it was registered -- via a
-template's own `secrets` field as above, via `files.any`'s `encrypted`/`encryptedDir` engines, or
-via plain `sops.secrets` -- not just ones declared through `files.templates`.
+template's own `secrets` field as above, via `files.secrets`, or via plain `sops.secrets` -- not
+just ones declared through `files.templates`.
 
 #### User created from a secret
 When you want to create a user account without exposing to the world the name of your user you can
