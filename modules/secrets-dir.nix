@@ -1,4 +1,4 @@
-# `encryptedDir` engine for files.secrets (see secret-type.nix/secrets.nix) -- author the
+# `encryptedDir` engine for secret.files (see secret-type.nix/secrets.nix) -- author the
 # directory's content as one sops-encrypted yaml/json file whose nesting mirrors the directory
 # tree (e.g. nginx.certs."server.crt": ENC[...]) -- sops-install-secrets' `key` lookup treats
 # "/" as a path separator into nested maps, not a literal character in a flat key, so a
@@ -13,7 +13,7 @@ let
   filesLib = import ./lib.nix { inherit lib pkgs; };
 
   entries = lib.filter (e: e._engine == "encryptedDir")
-    (lib.attrValues (lib.filterAttrs (_: e: e.enable) config.files.secrets));
+    (lib.attrValues (lib.filterAttrs (_: e: e.enable) config.secret.files));
 
   relpath = entry: key:
     if entry._prefix == "" then key

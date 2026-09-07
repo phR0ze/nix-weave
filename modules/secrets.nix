@@ -1,10 +1,10 @@
-# `files.secrets` -- standalone namespace for the encrypted/encryptedDir engines (see
+# `secret.files` -- standalone namespace for the encrypted/encryptedDir engines (see
 # secret-type.nix), split out of the shared fileType submodule so files.any/root/user/all stay
 # plaintext-only. This module owns the option declaration and the `encrypted` (single secret
 # file) engine, generating one sops.secrets entry per entry, placed directly at the entry's
 # target path -- decryption/placement/permissions are 100% delegated to sops-nix, no bespoke
 # activation code. secrets-dir.nix handles the `encryptedDir` engine, reading from this same
-# config.files.secrets, exactly like templates.nix/tmpfiles.nix consume config.files.templates
+# config.secret.files, exactly like templates.nix/tmpfiles.nix consume config.secret.templates
 # without re-declaring it.
 #---------------------------------------------------------------------------------------------------
 { config, lib, ... }:
@@ -12,7 +12,7 @@ let
   secretType = import ./secret-type.nix { inherit lib; };
 
   entries = lib.filter (e: e._engine == "encrypted")
-    (lib.attrValues (lib.filterAttrs (_: e: e.enable) config.files.secrets));
+    (lib.attrValues (lib.filterAttrs (_: e: e.enable) config.secret.files));
 
   toSecret = entry: {
     # A bare (no leading "/") identifier is used verbatim as the sops.secrets name -- entry.path
@@ -38,7 +38,7 @@ let
   };
 in
 {
-  options.files.secrets = lib.mkOption {
+  options.secret.files = lib.mkOption {
     type = secretType;
     default = { };
     description = ''
@@ -51,7 +51,7 @@ in
       default single-file mode -- see `prefix`'s own description.
     '';
     example = ''
-      files.secrets."newt/clientSecret".sopsFile = ./secrets.enc.yaml;
+      secret.files."newt/clientSecret".sopsFile = ./secrets.enc.yaml;
     '';
   };
 

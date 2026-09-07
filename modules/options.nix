@@ -15,7 +15,7 @@
 # The attribute name is always the install path (prefixed per-namespace below); there is no
 # settable `target` field, so there's exactly one place path/naming can come from.
 #
-# Rendered (sops-nix template) content is a separate, standalone `files.templates.<name>`
+# Rendered (sops-nix template) content is a separate, standalone `secret.templates.<name>`
 # namespace (see templates.nix/template-type.nix) rather than another field here.
 #---------------------------------------------------------------------------------------------------
 { lib, pkgs, ... }:

@@ -1,4 +1,4 @@
-# Declares the submodule type for files.templates. Modeled on user-from-secret-type.nix: no
+# Declares the submodule type for secret.templates. Modeled on user-from-secret-type.nix: no
 # isDefined auto-detection needed since membership in this namespace is unambiguous by
 # construction -- unlike file-type.nix's copy/weakCopy/link/encrypted/encryptedDir, which all
 # share one submodule and must be disambiguated from one another.
@@ -96,6 +96,6 @@ with lib.types; attrsOf (submodule (
 
     config._target =
       if lib.hasPrefix "/" config.path then config.path
-      else throw "files.templates.\"${name}\".path must be an absolute path starting with \"/\" (e.g. \"/run/caddy/cloudflare.env\")";
+      else throw "secret.templates.\"${name}\".path must be an absolute path starting with \"/\" (e.g. \"/run/caddy/cloudflare.env\")";
   }
 ))

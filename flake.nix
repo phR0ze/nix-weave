@@ -56,7 +56,7 @@
 
       # `nix build .#checks.<system>.vmTest -L`, or `nix flake check`, to boot a VM and assert
       # every engine (plaintext copy/link, sops-nix encrypted file/directory, owner-from-secret,
-      # files.templates, user-from-secret) actually installs correctly at activation time.
+      # secret.templates, secret.users) actually installs correctly at activation time.
       checks = forAllSystems (system:
         let pkgs = import nixpkgs { inherit system; }; in
         {

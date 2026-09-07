@@ -4,5 +4,5 @@
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  files.secrets."newt/clientSecret".sopsFile = ./secrets.enc.yaml;
+  secret.files."newt/clientSecret".sopsFile = ./secrets.enc.yaml;
 }

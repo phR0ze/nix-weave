@@ -7,7 +7,7 @@
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  users.fromSecret."svc-account2" = {
+  secret.users."svc-account2" = {
     sopsFile = ./secrets.enc.yaml;
     userSecretRef = "users/user2/name";
     groupSecretRef = "users/user2/group";

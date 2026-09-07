@@ -1,4 +1,4 @@
-# Ensures the parent directory of every files.secrets/files.templates target exists before
+# Ensures the parent directory of every secret.files/secret.templates target exists before
 # sops-nix's activation tries to write into it, rather than depending on undocumented
 # parent-dir auto-creation behavior for custom `path` overrides on sops.secrets/sops.templates.
 #---------------------------------------------------------------------------------------------------
@@ -13,9 +13,9 @@ let
     group = ownerStr e.group;
   };
 
-  secretEntries = lib.attrValues (lib.filterAttrs (_: e: e.enable) config.files.secrets);
+  secretEntries = lib.attrValues (lib.filterAttrs (_: e: e.enable) config.secret.files);
 
-  templateEntries = lib.attrValues (lib.filterAttrs (_: e: e.enable) config.files.templates);
+  templateEntries = lib.attrValues (lib.filterAttrs (_: e: e.enable) config.secret.templates);
 
   parentDirs = lib.unique (map toParentDir (secretEntries ++ templateEntries));
 

@@ -1,4 +1,4 @@
-# Declares the submodule type for users.fromSecret. Modeled on template-type.nix: no isDefined
+# Declares the submodule type for secret.users. Modeled on template-type.nix: no isDefined
 # auto-detection needed since membership in this namespace is unambiguous by construction.
 #
 # Mirrors the shape of NixOS's own users.users/users.groups as closely as the "real name isn't

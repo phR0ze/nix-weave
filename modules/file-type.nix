@@ -2,8 +2,8 @@
 # plaintext content only (copy/weakCopy/link) -- installed via the ported activation script.
 #
 # Encrypted content (sops-nix's own sops.secrets) lives in its own standalone
-# `files.secrets.<name>` namespace instead (see secret-type.nix/secrets.nix/secrets-dir.nix),
-# and rendered (sops-nix template) content in `files.templates.<name>` (see
+# `secret.files.<name>` namespace instead (see secret-type.nix/secrets.nix/secrets-dir.nix),
+# and rendered (sops-nix template) content in `secret.templates.<name>` (see
 # template-type.nix/templates.nix) -- both split out rather than being additional engines here,
 # so membership in each is unambiguous by construction and files.any/root/user/all stay simple:
 # every entry is plaintext, and (for files.any) the attribute name is always a real, absolute

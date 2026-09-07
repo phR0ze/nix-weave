@@ -1,17 +1,17 @@
-# `files.templates` -- own standalone namespace for sops-nix-rendered content (mixing ordinary
+# `secret.templates` -- own standalone namespace for sops-nix-rendered content (mixing ordinary
 # plaintext with config.sops.placeholder references for secret values), analogous to how
-# users.fromSecret is its own namespace rather than an engine bolted onto files.any/root/user/all
+# secret.users is its own namespace rather than an engine bolted onto files.any/root/user/all
 # (see users-from-secret.nix/user-from-secret-type.nix). Kept out of the shared fileType
 # submodule used by files.any/root/user/all because that submodule auto-detects which engine an
 # entry is using without forcing any option's value, and template content may reference
 # config.sops.placeholder -- forcing it prematurely (merely to classify the entry) would recurse,
 # since sops-nix only makes sops.placeholder available once it already knows sops.templates is
-# non-empty. Being its own namespace sidesteps that: membership in files.templates is unambiguous
+# non-empty. Being its own namespace sidesteps that: membership in secret.templates is unambiguous
 # by construction, so there's nothing to classify (see template-type.nix).
 #
-# Thin passthrough that generates one sops.templates entry (keyed by the files.templates.<name>
+# Thin passthrough that generates one sops.templates entry (keyed by the secret.templates.<name>
 # identifier, just like sops.templates."<name>") plus any sops.secrets entries the template needs
-# (from files.templates.<name>.secrets), rendered by sops-nix at activation time and placed at
+# (from secret.templates.<name>.secrets), rendered by sops-nix at activation time and placed at
 # `path` -- no bespoke activation code needed since sops.templates already supports arbitrary
 # path/owner/group/mode.
 #---------------------------------------------------------------------------------------------------
@@ -20,7 +20,7 @@ let
   types = import ./file-type.nix { inherit lib; pkgs = null; };
   templateType = import ./template-type.nix { inherit lib; inherit (types) ownerRefType; };
 
-  entries = lib.filterAttrs (_: e: e.enable) config.files.templates;
+  entries = lib.filterAttrs (_: e: e.enable) config.secret.templates;
 
   ownerStr = v: if builtins.isString v then v else "root";
 
@@ -42,7 +42,7 @@ let
   };
 in
 {
-  options.files.templates = lib.mkOption {
+  options.secret.templates = lib.mkOption {
     type = templateType;
     default = { };
     description = ''
@@ -53,7 +53,7 @@ in
       can be registered inline via `secrets` instead of a separate sops.secrets.<key> block.
     '';
     example = ''
-      files.templates."cloudflare-env" = {
+      secret.templates."cloudflare-env" = {
         path = "/run/caddy/cloudflare.env";
         user = "caddy"; group = "caddy";
         content = '''

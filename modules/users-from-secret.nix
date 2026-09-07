@@ -1,4 +1,4 @@
-# `users.fromSecret` -- creates a system user and group at activation time whose actual names
+# `secret.users` -- creates a system user and group at activation time whose actual names
 # are only known after sops-nix decrypts them, so neither ever appears in cleartext in the Nix
 # store or git. Unlike files.*, <name> can't double as the real identity (it isn't known at eval
 # time) -- it's just an internal identifier, like sops.secrets.<name> today.
@@ -29,7 +29,7 @@
 let
   userFromSecretType = import ./user-from-secret-type.nix { inherit lib; };
 
-  entries = lib.filterAttrs (_: e: e.enable) config.users.fromSecret;
+  entries = lib.filterAttrs (_: e: e.enable) config.secret.users;
 
   toSecrets = name: entry:
     [
@@ -167,12 +167,12 @@ let
   '';
 in
 {
-  options.users.fromSecret = lib.mkOption {
+  options.secret.users = lib.mkOption {
     type = userFromSecretType;
     default = { };
     description = "System users (and groups) created at activation from decrypted sops secrets.";
     example = ''
-      users.fromSecret."svc-account" = {
+      secret.users."svc-account" = {
         sopsFile = ./secrets.enc.yaml;
         userSecretRef = "provisioned/svcUsername";
         groupSecretRef = "provisioned/svcGroupname";
@@ -184,7 +184,7 @@ in
     assertions = lib.mapAttrsToList
       (name: entry: {
         assertion = !(entry.passwordSecretRef != null && entry.passwordHashSecretRef != null);
-        message = "users.fromSecret.${name}: passwordSecretRef and passwordHashSecretRef are mutually exclusive.";
+        message = "secret.users.${name}: passwordSecretRef and passwordHashSecretRef are mutually exclusive.";
       })
       entries;
 

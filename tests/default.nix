@@ -44,35 +44,35 @@ pkgs.testers.runNixOSTest {
       copy = ../examples/include/svc/data;
     };
 
-    # -- files.secrets: bare (no leading "/") identifier with an explicit key override -- no
+    # -- secret.files: bare (no leading "/") identifier with an explicit key override -- no
     # install path given up front, so it defaults to sops-nix's own "/run/secrets/<name>"
     # convention --
-    files.secrets."newt-client-secret" = {
+    secret.files."newt-client-secret" = {
       sopsFile = ./fixtures/secrets.enc.yaml;
       key = "newt/clientSecret";
     };
 
-    # -- consume files.secrets."newt-client-secret".path as an input elsewhere, mirroring
+    # -- consume secret.files."newt-client-secret".path as an input elsewhere, mirroring
     # config.sops.secrets."<name>".path, to prove it resolves to the same real (defaulted) path --
     systemd.services.newt-client-secret-check = {
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${pkgs.bash}/bin/bash -c 'cat ${config.files.secrets."newt-client-secret".path} > /run/newt-client-secret-check'";
+        ExecStart = "${pkgs.bash}/bin/bash -c 'cat ${config.secret.files."newt-client-secret".path} > /run/newt-client-secret-check'";
       };
     };
 
-    # -- files.secrets: bare (no leading "/") identifier -- no install path given up front, so
+    # -- secret.files: bare (no leading "/") identifier -- no install path given up front, so
     # it defaults to sops-nix's own "/run/secrets/<name>" convention, with the identifier
     # doubling as the sops key lookup (both default to "newt/clientSecret") exactly like an
     # ordinary config.sops.secrets."newt/clientSecret" left at its default path --
-    files.secrets."newt/clientSecret".sopsFile = ./fixtures/secrets.enc.yaml;
+    secret.files."newt/clientSecret".sopsFile = ./fixtures/secrets.enc.yaml;
 
-    # -- files.secrets: directory fanned out into one sops.secrets entry per leaf, bare (no
+    # -- secret.files: directory fanned out into one sops.secrets entry per leaf, bare (no
     # leading "/") identifier -- each leaf defaults to sops-nix's own "/run/secrets/<name>/<leaf>"
     # path --
-    files.secrets."nginx/certs" = { sopsFile = ./fixtures/certs.enc.yaml; prefix = "nginx/certs"; };
+    secret.files."nginx/certs" = { sopsFile = ./fixtures/certs.enc.yaml; prefix = "nginx/certs"; };
 
     # -- owner resolved from a decrypted secret, never appearing in cleartext config --
     files.any."/opt/svc/data" = {
@@ -82,13 +82,13 @@ pkgs.testers.runNixOSTest {
 
     # -- templated file: mixed plaintext + two sops placeholders, secrets registered inline via
     # the template's own `secrets` field rather than a separate sops.secrets block --
-    files.templates."cloudflare-env" = {
+    secret.templates."cloudflare-env" = {
       path = "/run/caddy/cloudflare.env";   # defaults to /run/secrets/rendered/<name> like sops-nix
       user = "caddy";                       # defaults to root:root like sops-nix
       group = "caddy";
       content = ''
-        CF_ZONE=${config.files.secret."caddy/cfZone"}
-        CF_API_TOKEN=${config.files.secret."caddy/cloudflareApiToken"}
+        CF_ZONE=${config.secret.ref."caddy/cfZone"}
+        CF_API_TOKEN=${config.secret.ref."caddy/cloudflareApiToken"}
       '';
       secrets = {
         "caddy/cfZone".sopsFile = ./fixtures/secrets.enc.yaml;
@@ -96,24 +96,24 @@ pkgs.testers.runNixOSTest {
       };
     };
 
-    # -- consume files.templates."cloudflare-env".path as an input elsewhere, to prove it
+    # -- consume secret.templates."cloudflare-env".path as an input elsewhere, to prove it
     # resolves to the same real, rendered path rather than just round-tripping a Nix string --
     systemd.services.cloudflare-env-check = {
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        EnvironmentFile = config.files.templates."cloudflare-env".path;
+        EnvironmentFile = config.secret.templates."cloudflare-env".path;
         ExecStart = "${pkgs.bash}/bin/bash -c 'echo \"$CF_ZONE\" > /run/cloudflare-env-check-zone'";
       };
     };
 
-    # -- already-declared plain group for users.fromSecret's extraGroups below --
+    # -- already-declared plain group for secret.users's extraGroups below --
     users.groups.shared = { };
 
     # -- user/group created at activation, names only known after sops-nix decrypts them, with
     # isNormalUser/uid/extraGroups/passwordSecretRef exercising parity with users.users.<name> --
-    users.fromSecret."secret-account" = {
+    secret.users."secret-account" = {
       sopsFile = ./fixtures/secrets.enc.yaml;
       userSecretRef = "provisioned/secretUsername";
       groupSecretRef = "provisioned/secretGroupname";
@@ -125,7 +125,7 @@ pkgs.testers.runNixOSTest {
 
     # -- same as above, but the initial password comes pre-hashed (mkpasswd -m sha-512) via
     # passwordHashSecretRef, so the plaintext password is never decrypted to disk at all --
-    users.fromSecret."secret-hash-account" = {
+    secret.users."secret-hash-account" = {
       sopsFile = ./fixtures/secrets.enc.yaml;
       userSecretRef = "provisioned/secretHashUsername";
       groupSecretRef = "provisioned/secretHashGroupname";
@@ -164,11 +164,11 @@ pkgs.testers.runNixOSTest {
     with subtest("single file installed via copy (owned, force-overwritten)"):
         machine.succeed("grep -q 'placeholder service data file' /opt/svc/data-copy")
 
-    with subtest("files.secrets.\"newt-client-secret\".path resolves to the real decrypted file when used as an input elsewhere"):
+    with subtest("secret.files.\"newt-client-secret\".path resolves to the real decrypted file when used as an input elsewhere"):
         machine.wait_for_unit("newt-client-secret-check.service")
         machine.succeed("test \"$(cat /run/newt-client-secret-check)\" = 'test-newt-client-secret'")
 
-    with subtest("files.secrets.\"newt/clientSecret\" (bare identifier, no leading /) defaults to sops-nix's own /run/secrets/<name> path"):
+    with subtest("secret.files.\"newt/clientSecret\" (bare identifier, no leading /) defaults to sops-nix's own /run/secrets/<name> path"):
         machine.succeed("test \"$(cat /run/secrets/newt/clientSecret)\" = 'test-newt-client-secret'")
 
     with subtest("sops-nix decrypts a single encrypted file at activation"):
@@ -188,7 +188,7 @@ pkgs.testers.runNixOSTest {
         machine.succeed("grep -q '^CF_API_TOKEN=test-cf-api-token$' /run/caddy/cloudflare.env")
         machine.succeed("stat -L -c%U:%G:%a /run/caddy/cloudflare.env | grep -qx 'caddy:caddy:400'")
 
-    with subtest("files.templates.\"cloudflare-env\".path resolves to the real rendered file when used as an input elsewhere"):
+    with subtest("secret.templates.\"cloudflare-env\".path resolves to the real rendered file when used as an input elsewhere"):
         machine.wait_for_unit("cloudflare-env-check.service")
         machine.succeed("test \"$(cat /run/cloudflare-env-check-zone)\" = 'test-cf-zone.example.com'")
 

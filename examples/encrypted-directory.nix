@@ -4,5 +4,5 @@
 #---------------------------------------------------------------------------------------------------
 { ... }:
 {
-  files.secrets."nginx/certs" = { sopsFile = ./certs.enc.yaml; prefix = "nginx/certs"; };
+  secret.files."nginx/certs" = { sopsFile = ./certs.enc.yaml; prefix = "nginx/certs"; };
 }

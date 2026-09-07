@@ -1,6 +1,6 @@
 # Shared helper: flatten files.any/root/user/all into one list of enabled entries. Every entry
 # is plaintext (copy/weakCopy/link) by construction -- encrypted/encryptedDir live in their own
-# standalone files.secrets namespace instead (see secret-type.nix), not in this shared type.
+# standalone secret.files namespace instead (see secret-type.nix), not in this shared type.
 #
 # files.any/files.root entries are absolute-path, single-instance as declared. files.user/
 # files.all entries are home-relative and get expanded here into one instance per real user

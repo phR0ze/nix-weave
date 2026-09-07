@@ -64,7 +64,7 @@ Import ***nixos-files*** and set follows for your nixpkgs
 ### Install functions
 ***nixos-files*** provides a number of different ***install functions*** for different purposes.
 For every `files.<install-function>.<name>` the *name* attribute IS the install path -- there's no
-separate field to set, **except `files.templates`/`files.secrets`**, where *name* is just an
+separate field to set, **except `secret.templates`/`secret.files`**, where *name* is just an
 identifier (mirroring sops-nix's own `sops.templates."<name>"`/`sops.secrets."<name>"`) rather
 than necessarily being one. See [Templated files](#templated-files) and
 [Encrypted files](#encrypted-files).
@@ -75,13 +75,13 @@ than necessarily being one. See [Templated files](#templated-files) and
 | `files.root`        | installs plaintext files relative to `/root/`
 | `files.user`        | installs plaintext files for all real users i.e. `isNormalUser = true`
 | `files.all`         | installs plaintext files for both `/root/<name>` and `$HOME/<name>` for every real user
-| `files.secrets`     | decrypts a sops-encrypted file/directory straight to the target via sops-nix's own `sops.secrets`
-| `files.templates`   | renders a file mixing plaintext and secret fields via sops-nix's template engine
-| `users.fromSecret`  | installs a new user/group idempotently from secrets to avoid exposing PII
+| `secret.files`      | decrypts a sops-encrypted file/directory straight to the target via sops-nix's own `sops.secrets`
+| `secret.templates`  | renders a file mixing plaintext and secret fields via sops-nix's template engine
+| `secret.users`      | installs a new user/group idempotently from secrets to avoid exposing PII
 
 > [!NOTE]
-> `files.secret` (singular, [an alias for `config.sops.placeholder`](#templated-files)) and
-> `files.secrets` (plural, this install function) are two different options -- easy to conflate
+> `secret.ref` (singular, [an alias for `config.sops.placeholder`](#templated-files)) and
+> `secret.files` (plural, this install function) are two different options -- easy to conflate
 > by name, two related but separate functions: one references a value inside template content, the
 > other installs a decrypted file/directory.
 
@@ -91,7 +91,7 @@ Every entry also exposes a read-only `path` field with the final resolved instal
 
 ```nix
 systemd.services.cloudflare-env-check.serviceConfig.EnvironmentFile =
-  config.files.templates."cloudflare-env".path;
+  config.secret.templates."cloudflare-env".path;
 ```
 
 ### Content type and ownership
@@ -102,7 +102,7 @@ configuration to ensure its always correct. If ***unowned*** then nixos-files wi
 installed if it doesn't exist and not touch it after that.
 
 The various content types/modes below have a specific ownership type they evoke.
-`copy`/`link` (and every `files.secrets`/`files.templates` entry) are all **owned**.
+`copy`/`link` (and every `secret.files`/`secret.templates` entry) are all **owned**.
 `weakCopy` is the only **unowned** case.
 
 `copy`/`weakCopy`/`link` are `files.any`/`root`/`user`/`all`'s content types: they accept either a
@@ -116,12 +116,12 @@ directory for `link`) is used directly.
 | `weakCopy`      | Copies the content to the install location if it doesn't exist                   |
 | `link`          | Installs a readonly symlink at the target, pointed at the content                |
 
-`files.secrets` always takes a `sopsFile` path, decrypted straight to the target by sops-nix --
+`secret.files` always takes a `sopsFile` path, decrypted straight to the target by sops-nix --
 no plaintext ever touches the Nix store or git. It has no separate content-type field to set;
 instead it picks one of two modes depending on whether `prefix` is set (see
 [Encrypted files](#encrypted-files)):
 
-| `files.secrets` mode | Trigger                | Behavior                                                                  |
+| `secret.files` mode   | Trigger                | Behavior                                                                  |
 | --------------------- | ----------------------- | -------------------------------------------------------------------------- |
 | single-file            | `prefix` unset          | Decrypts a single secret value (looked up via `key`) straight to the target |
 | directory-fanout       | `prefix` set (even `""`) | Decrypts a whole directory of secrets, fanning out into one target file per leaf |
@@ -134,9 +134,9 @@ the option to then override in some cases.
 * `files.root` - defaults to `root:root` and can not be overridden
 * `files.user` - defaults to the implicated user and can not be overridden
 * `files.all` - defaults to the implicated user and can not be overridden
-* `files.secrets` - defaults to `root:root` and ***allows for overriding user and group*** (plain
+* `secret.files` - defaults to `root:root` and ***allows for overriding user and group*** (plain
   strings only -- no secretRef support, since sops-nix's own ownership fields don't support it)
-* `files.templates` - defaults to `root:root` and ***allows for overriding user and group***
+* `secret.templates` - defaults to `root:root` and ***allows for overriding user and group***
 
 The following provides examples of overridding the user and group for the ***any*** install function.
 
@@ -237,8 +237,8 @@ files.any."/opt/svc/data" = {
 ```
 
 #### Encrypted files
-***files.secrets*** is its own standalone install function (like ***users.fromSecret***/
-***files.templates***, not a field on `files.any`/`root`/`user`/`all`, which are plaintext-only)
+***secret.files*** is its own standalone install function (like ***secret.users***/
+***secret.templates***, not a field on `files.any`/`root`/`user`/`all`, which are plaintext-only)
 for content decrypted straight from a sops-encrypted source via sops-nix's own `sops.secrets`.
 
 The attribute name is a sops-nix identifier, not necessarily an install path: give it as a bare
@@ -252,13 +252,13 @@ mirroring `config.sops.secrets."<name>".path`:
 
 ```nix
 systemd.services.newt.serviceConfig.LoadCredential =
-  "client-secret:${config.files.secrets."newt/clientSecret".path}";
+  "client-secret:${config.secret.files."newt/clientSecret".path}";
 ```
 
 > [!NOTE]
-> `files.secrets."<name>"` (plural, this install function) installs a decrypted file/directory.
-> `files.secret."<key>"` (singular, [an alias for `config.sops.placeholder`](#templated-files))
-> references a decrypted value from inside `files.templates` content. Easy to conflate by name --
+> `secret.files."<name>"` (plural, this install function) installs a decrypted file/directory.
+> `secret.ref."<key>"` (singular, [an alias for `config.sops.placeholder`](#templated-files))
+> references a decrypted value from inside `secret.templates` content. Easy to conflate by name --
 > they're unrelated options.
 
 ##### Encrypted file
@@ -267,7 +267,7 @@ attribute name, so naming the entry after the sops key (as below) needs no separ
 set `key` explicitly if you want a different sops key than the name/path used.
 
 ```nix
-files.secrets."newt/clientSecret".sopsFile = ./secrets.enc.yaml;   # -> /run/secrets/newt/clientSecret
+secret.files."newt/clientSecret".sopsFile = ./secrets.enc.yaml;   # -> /run/secrets/newt/clientSecret
 ```
 
 ##### Encrypted directory
@@ -288,16 +288,16 @@ nginx:
 ```
 
 ```nix
-files.secrets."nginx/certs" = {
+secret.files."nginx/certs" = {
   sopsFile = ./certs.enc.yaml;
   prefix = "nginx/certs";   # setting prefix at all (even to "") selects directory-fanout mode
 };   # -> /run/secrets/nginx/certs/<leaf>
 ```
 
 #### Templated files
-***files.templates*** is its own standalone install function (like ***users.fromSecret***, not a
+***secret.templates*** is its own standalone install function (like ***secret.users***, not a
 field on `files.any`/`root`/`user`/`all`) for content rendered by sops-nix's template engine --
-`content`/`file` may reference secret values via `config.files.secret`. The attribute name is
+`content`/`file` may reference secret values via `config.secret.ref`. The attribute name is
 just an identifier, mirroring sops-nix's own `sops.templates."<name>"` -- it's not the install
 path. `path` sets the absolute destination and defaults to sops-nix's own
 `/run/secrets/rendered/<name>` convention if left unset. `content`/`file` can't be merged into
@@ -311,12 +311,12 @@ placeholders need can be registered inline via its own `secrets` field instead o
 `sops.secrets.<key>` block:
 
 ```nix
-files.templates."cloudflare-env" = {
+secret.templates."cloudflare-env" = {
   path = "/run/caddy/cloudflare.env";
   user = "caddy"; group = "caddy";
   content = ''
-    CF_ZONE=${config.files.secret."caddy/cfZone"}
-    CF_API_TOKEN=${config.files.secret."caddy/cloudflareApiToken"}
+    CF_ZONE=${config.secret.ref."caddy/cfZone"}
+    CF_API_TOKEN=${config.secret.ref."caddy/cloudflareApiToken"}
   '';
   secrets = {
     "caddy/cfZone".sopsFile = ./secrets.enc.yaml;
@@ -325,17 +325,17 @@ files.templates."cloudflare-env" = {
 };
 ```
 
-`config.files.secret."<key>"` is a read-only alias for sops-nix's own
+`config.secret.ref."<key>"` is a read-only alias for sops-nix's own
 `config.sops.placeholder."<key>"` -- same value, same restriction (only meaningful inside
-`files.templates` `content`/`file`, since that's the only place sops-nix actually substitutes it
-at activation time), just kept under the `files.*` namespace instead of reaching into `sops.*`
+`secret.templates` `content`/`file`, since that's the only place sops-nix actually substitutes it
+at activation time), just kept under the `secret.*` namespace instead of reaching into `sops.*`
 directly. It works for any `config.sops.secrets` entry, however it was registered -- via a
-template's own `secrets` field as above, via `files.secrets`, or via plain `sops.secrets` -- not
-just ones declared through `files.templates`.
+template's own `secrets` field as above, via `secret.files`, or via plain `sops.secrets` -- not
+just ones declared through `secret.templates`.
 
 #### User created from a secret
 When you want to create a user account without exposing to the world the name of your user you can
-use the ***users.fromSecret*** function which keeps the user and group names as placeholders to then
+use the ***secret.users*** function which keeps the user and group names as placeholders to then
 be set from secrets at activation time. This keeps them encrypted in your git repo and in the nix
 store and only decrypted at activation time. This is of course idempotent and user accounts are only
 ever created once.
@@ -356,7 +356,7 @@ mirroring `users.users.<name>.hashedPassword`. The two are mutually exclusive on
 ```nix
 users.groups.shared = { };
 
-users.fromSecret."svc-account" = {
+secret.users."svc-account" = {
   sopsFile = ./secrets.enc.yaml;
   userSecretRef = "users/user1/name";
   groupSecretRef = "users/user1/group";
@@ -415,7 +415,7 @@ nix flake check
 `tests/` is a NixOS VM test (`checks.<system>.vmTest`) that boots a machine wired up with every
 engine at once -- plaintext `copy`/`link` across `files.any`/`root`/`user`/`all`, a single
 sops-encrypted file, an encrypted directory fan-out, owner-from-secret resolution, a
-`files.templates` entry, and a user/group created from a secret -- then asserts the installed
+`secret.templates` entry, and a user/group created from a secret -- then asserts the installed
 content, mode, and owner at each target path. Unlike the `examples/`, which are only checked for evaluation, this
 actually decrypts secrets and inspects the result, using the same disposable age keypair
 (`tests/keys/test-age-key.txt`) that encrypts `examples/*.enc.yaml`, applied here to the

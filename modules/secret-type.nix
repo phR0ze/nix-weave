@@ -1,7 +1,7 @@
-# Declares the submodule type for files.secrets -- the standalone namespace for the encrypted/
+# Declares the submodule type for secret.files -- the standalone namespace for the encrypted/
 # encryptedDir engines (see secrets.nix/secrets-dir.nix), split out of the shared fileType
 # submodule (file-type.nix) so files.any/root/user/all stay plaintext-only. Membership here is
-# unambiguous by construction, mirroring how files.templates is its own namespace
+# unambiguous by construction, mirroring how secret.templates is its own namespace
 # (template-type.nix) rather than a field bolted onto fileType.
 #
 # sopsFile is one shared, top-level field -- there's no need to nest it under a per-engine
@@ -150,9 +150,9 @@ with lib.types; attrsOf (submodule (
       {
         _engine =
           if !options.sopsFile.isDefined then
-            throw "files.secrets.\"${name}\" must set sopsFile"
+            throw "secret.files.\"${name}\" must set sopsFile"
           else if options.prefix.isDefined && options.key.isDefined then
-            throw "files.secrets.\"${name}\" sets both key (single-file mode) and prefix (directory-fanout mode) -- set only one"
+            throw "secret.files.\"${name}\" sets both key (single-file mode) and prefix (directory-fanout mode) -- set only one"
           else if options.prefix.isDefined then "encryptedDir"
           else "encrypted";
 

@@ -12,7 +12,7 @@
   # only reference groups that exist by the time this activation script runs.
   users.groups.shared = { };
 
-  users.fromSecret."svc-account" = {
+  secret.users."svc-account" = {
     sopsFile = ./secrets.enc.yaml;
     userSecretRef = "users/user1/name";
     groupSecretRef = "users/user1/group";
