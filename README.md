@@ -295,8 +295,8 @@ supplementary membership in already-declared groups:
 
 If you'd rather not have the plaintext password decrypted to disk at all, even transiently, use
 `passwordHashSecretRef` instead of `passwordSecretRef` -- its secret should already be a hash
-(e.g. `mkpasswd -m sha-512`), mirroring `users.users.<name>.hashedPassword`. The two are mutually
-exclusive on the same entry.
+(e.g. `mkpasswd -m sha-512 'example-svc-password' 2>&1 || openssl passwd -6 'example-svc-password' 2>&1`), 
+mirroring `users.users.<name>.hashedPassword`. The two are mutually exclusive on the same entry.
 
 ```nix
 users.groups.shared = { };

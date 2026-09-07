@@ -19,6 +19,7 @@
         "templated-file"
         "owner-from-secret"
         "user-from-secret"
+        "user-from-password-hash"
       ];
 
       mkExample = system: name: nixpkgs.lib.nixosSystem {
