@@ -294,25 +294,26 @@ always require an explicit absolute path, since there's no sops-nix default to f
 #### Templated files
 ***files.templates*** is its own standalone install function (like ***users.fromSecret***, not a
 field on `files.any`/`root`/`user`/`all`) for content rendered by sops-nix's template engine --
-`content`/`file` may reference `config.sops.placeholder`. The attribute name is just an
-identifier, mirroring sops-nix's own `sops.templates."<name>"` -- it's not the install path.
-`path` sets the absolute destination and defaults to sops-nix's own `/run/secrets/rendered/<name>`
-convention if left unset. `content`/`file` can't be merged into one field the way `copy`/`weakCopy`
-accept either a string or a path: distinguishing which was given requires checking the value's
-type (`builtins.isString`/`isPath`), and that check forces the value -- which would recurse for
-`content`, since it may interpolate `config.sops.placeholder`, itself only available once sops-nix
-already knows `sops.templates` is non-empty. They're two separately-typed fields instead, and
-`file` takes precedence if both are set. Defaults to `root:root` ownership and `0400` filemode,
-both overridable. Any `sops.secrets` a template's placeholders need can be registered inline via
-its own `secrets` field instead of a separate `sops.secrets.<key>` block:
+`content`/`file` may reference secret values via `config.files.secret`. The attribute name is
+just an identifier, mirroring sops-nix's own `sops.templates."<name>"` -- it's not the install
+path. `path` sets the absolute destination and defaults to sops-nix's own
+`/run/secrets/rendered/<name>` convention if left unset. `content`/`file` can't be merged into
+one field the way `copy`/`weakCopy` accept either a string or a path: distinguishing which was
+given requires checking the value's type (`builtins.isString`/`isPath`), and that check forces
+the value -- which would recurse for `content`, since it may interpolate `config.sops.placeholder`
+under the hood, itself only available once sops-nix already knows `sops.templates` is non-empty.
+They're two separately-typed fields instead, and `file` takes precedence if both are set. Defaults
+to `root:root` ownership and `0400` filemode, both overridable. Any `sops.secrets` a template's
+placeholders need can be registered inline via its own `secrets` field instead of a separate
+`sops.secrets.<key>` block:
 
 ```nix
 files.templates."cloudflare-env" = {
   path = "/run/caddy/cloudflare.env";
   user = "caddy"; group = "caddy";
   content = ''
-    CF_ZONE=${config.sops.placeholder."caddy/cfZone"}
-    CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
+    CF_ZONE=${config.files.secret."caddy/cfZone"}
+    CF_API_TOKEN=${config.files.secret."caddy/cloudflareApiToken"}
   '';
   secrets = {
     "caddy/cfZone".sopsFile = ./secrets.enc.yaml;
@@ -320,6 +321,14 @@ files.templates."cloudflare-env" = {
   };
 };
 ```
+
+`config.files.secret."<key>"` is a read-only alias for sops-nix's own
+`config.sops.placeholder."<key>"` -- same value, same restriction (only meaningful inside
+`files.templates` `content`/`file`, since that's the only place sops-nix actually substitutes it
+at activation time), just kept under the `files.*` namespace instead of reaching into `sops.*`
+directly. It works for any `config.sops.secrets` entry, however it was registered -- via a
+template's own `secrets` field as above, via `files.any`'s `encrypted`/`encryptedDir` engines, or
+via plain `sops.secrets` -- not just ones declared through `files.templates`.
 
 #### User created from a secret
 When you want to create a user account without exposing to the world the name of your user you can

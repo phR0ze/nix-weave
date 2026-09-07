@@ -11,6 +11,7 @@
     ./secret-owner.nix
     ./secrets.nix
     ./secrets-dir.nix
+    ./secret.nix
     ./templates.nix
     ./users-from-secret.nix
     ./tmpfiles.nix

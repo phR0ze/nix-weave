@@ -95,8 +95,8 @@ pkgs.testers.runNixOSTest {
       user = "caddy";                       # defaults to root:root like sops-nix
       group = "caddy";
       content = ''
-        CF_ZONE=${config.sops.placeholder."caddy/cfZone"}
-        CF_API_TOKEN=${config.sops.placeholder."caddy/cloudflareApiToken"}
+        CF_ZONE=${config.files.secret."caddy/cfZone"}
+        CF_API_TOKEN=${config.files.secret."caddy/cloudflareApiToken"}
       '';
       secrets = {
         "caddy/cfZone".sopsFile = ./fixtures/secrets.enc.yaml;
