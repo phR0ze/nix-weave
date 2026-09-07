@@ -21,14 +21,14 @@ let
     # compute the identical default itself.
     name = if entry._usesDefaultSopsPath then entry._id else lib.removePrefix "/" entry.path;
     value = {
-      sopsFile = entry.encrypted.sopsFile;
-      format = entry.encrypted.format;
+      sopsFile = entry.sopsFile;
+      format = entry.format;
       # sops-install-secrets treats "/" in `key` as a path separator into nested maps (not a
       # literal character), so an explicit target's default must not be the full
       # (slash-containing) path -- fall back to just its last path component instead. A bare
       # identifier has no such ambiguity: it's used as-is, exactly like sops-nix's own default.
       key =
-        if entry.encrypted.key != null then entry.encrypted.key
+        if entry._key != null then entry._key
         else if entry._usesDefaultSopsPath then entry._id
         else baseNameOf entry.path;
       owner = entry.user;
@@ -47,10 +47,11 @@ in
       a sops-nix identifier: given without a leading "/" it doubles as the default sops key
       lookup, and the install path defaults to sops-nix's own "/run/secrets/<name>" convention;
       given with a leading "/" it's used as a literal install path instead, overriding that
-      default. Exactly one of encrypted.sopsFile/encryptedDir.sopsFile must be set.
+      default. Setting `prefix` (even to "") selects directory-fanout mode instead of the
+      default single-file mode -- see `prefix`'s own description.
     '';
     example = ''
-      files.secrets."newt/clientSecret".encrypted.sopsFile = ./secrets.enc.yaml;
+      files.secrets."newt/clientSecret".sopsFile = ./secrets.enc.yaml;
     '';
   };
 

@@ -4,9 +4,22 @@
 # unambiguous by construction, mirroring how files.templates is its own namespace
 # (template-type.nix) rather than a field bolted onto fileType.
 #
-# Each entry picks exactly one engine by setting one of:
-#   - encrypted.sopsFile      (single secret file, generates one sops.secrets entry)
-#   - encryptedDir.sopsFile   (directory of secrets, fans out into N sops.secrets entries)
+# sopsFile is one shared, top-level field -- there's no need to nest it under a per-engine
+# encrypted/encryptedDir block the way file-type.nix's shared fileType submodule once needed to
+# (that nesting existed only to disambiguate the encrypted engines from copy/weakCopy/link and
+# from each other; this namespace has nothing else in it). Instead:
+#   - `prefix` unset (single-file mode): `key` (defaulting to the attribute name) looks up one
+#     leaf value in sopsFile, generating one sops.secrets entry.
+#   - `prefix` set, even to "" (directory-fanout mode): sopsFile's nesting under that "/"-
+#     namespaced prefix mirrors a directory tree, fanned out into one sops.secrets entry per
+#     leaf. `key` is meaningless here (each leaf's own key comes from the file structure
+#     instead) -- setting both `key` and `prefix` on one entry is a mutually-exclusive error.
+#
+# `key`/`prefix` deliberately have NO default, same reasoning as file-type.nix's copy/weakCopy/
+# link: `options.X.isDefined` is true whenever a default is declared (even `default = null`)
+# regardless of whether the caller actually set it, so omitting the default is what keeps
+# isDefined meaningful as "did the caller set this". `_key`/`_prefix` below are the always-safe,
+# already-resolved mirrors external modules (secrets.nix/secrets-dir.nix) actually read.
 #
 # The attribute name is a sops-nix identifier, not necessarily an install path: given without a
 # leading "/" it doubles as the default sops key lookup and the install path defaults to
@@ -19,7 +32,7 @@
 #---------------------------------------------------------------------------------------------------
 { lib }:
 with lib.types; attrsOf (submodule (
-  { name, options, ... }: {
+  { name, config, options, ... }: {
     options = {
       enable = lib.mkOption {
         type = bool;
@@ -51,40 +64,37 @@ with lib.types; attrsOf (submodule (
         description = "Mode of the installed file(s).";
       };
 
-      encrypted = {
-        sopsFile = lib.mkOption {
-          type = nullOr path;
-          description = "sops-encrypted file containing this entry's value.";
-        };
-        key = lib.mkOption {
-          default = null;
-          type = nullOr str;
-          description = ''
-            Key within sopsFile ("/" navigates into nested maps, per sops-install-secrets).
-            Defaults to the attribute name.
-          '';
-        };
-        format = lib.mkOption {
-          type = enum [ "yaml" "json" "binary" "dotenv" "ini" ];
-          default = "yaml";
-          description = "Format of sopsFile.";
-        };
+      sopsFile = lib.mkOption {
+        type = nullOr path;
+        description = ''
+          sops-encrypted file containing this entry's value (single-file mode), or whose
+          nesting mirrors a directory tree under `prefix` (directory-fanout mode, when `prefix`
+          is set).
+        '';
       };
 
-      encryptedDir = {
-        sopsFile = lib.mkOption {
-          type = nullOr path;
-          description = ''
-            sops-encrypted yaml/json file whose nesting mirrors the directory tree (one leaf
-            per file, e.g. nginx.certs."server.crt"). Fanned out into one sops.secrets entry
-            per leaf, keyed by its "/"-joined path, at activation time.
-          '';
-        };
-        prefix = lib.mkOption {
-          default = "";
-          type = str;
-          description = "Only keys under this \"/\"-namespaced prefix are installed into target.";
-        };
+      key = lib.mkOption {
+        type = nullOr str;
+        description = ''
+          Single-file mode only: key within sopsFile ("/" navigates into nested maps, per
+          sops-install-secrets). Defaults to the attribute name. Mutually exclusive with
+          `prefix`.
+        '';
+      };
+
+      format = lib.mkOption {
+        type = enum [ "yaml" "json" "binary" "dotenv" "ini" ];
+        default = "yaml";
+        description = "Single-file mode only: format of sopsFile.";
+      };
+
+      prefix = lib.mkOption {
+        type = str;
+        description = ''
+          Directory-fanout mode only: only keys under this "/"-namespaced prefix are installed
+          into target. Setting this at all (even to "") selects directory-fanout mode instead of
+          single-file mode -- mutually exclusive with `key`.
+        '';
       };
 
       # -- read-only, computed --
@@ -119,29 +129,40 @@ with lib.types; attrsOf (submodule (
         internal = true;
         description = "Which engine this entry is installed through.";
       };
+
+      _key = lib.mkOption {
+        type = nullOr str;
+        internal = true;
+        description = "key if the caller set it, else null -- safe to force unconditionally.";
+      };
+
+      _prefix = lib.mkOption {
+        type = str;
+        internal = true;
+        description = "prefix if the caller set it, else \"\" -- safe to force unconditionally.";
+      };
     };
 
     config =
       let
-        setMechanisms = lib.filter (m: m.isDefined) [
-          { name = "encrypted.sopsFile"; isDefined = options.encrypted.sopsFile.isDefined; }
-          { name = "encryptedDir.sopsFile"; isDefined = options.encryptedDir.sopsFile.isDefined; }
-        ];
-        tooMany = lib.length setMechanisms > 1;
-
         usesDefaultSopsPath = !(lib.hasPrefix "/" name);
       in
       {
         _engine =
-          if tooMany then
-            throw "files.secrets.\"${name}\" sets more than one install mechanism (${lib.concatMapStringsSep ", " (m: m.name) setMechanisms}) -- set exactly one of encrypted.sopsFile/encryptedDir.sopsFile"
-          else if options.encrypted.sopsFile.isDefined then "encrypted"
-          else if options.encryptedDir.sopsFile.isDefined then "encryptedDir"
-          else throw "files.secrets.\"${name}\" must set one of encrypted.sopsFile/encryptedDir.sopsFile";
+          if !options.sopsFile.isDefined then
+            throw "files.secrets.\"${name}\" must set sopsFile"
+          else if options.prefix.isDefined && options.key.isDefined then
+            throw "files.secrets.\"${name}\" sets both key (single-file mode) and prefix (directory-fanout mode) -- set only one"
+          else if options.prefix.isDefined then "encryptedDir"
+          else "encrypted";
 
         _id = name;
 
         _usesDefaultSopsPath = usesDefaultSopsPath;
+
+        _key = if options.key.isDefined then config.key else null;
+
+        _prefix = if options.prefix.isDefined then config.prefix else "";
 
         path = if usesDefaultSopsPath then "/run/secrets/${name}" else name;
       };

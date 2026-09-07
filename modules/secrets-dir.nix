@@ -16,14 +16,14 @@ let
     (lib.attrValues (lib.filterAttrs (_: e: e.enable) config.files.secrets));
 
   relpath = entry: key:
-    if entry.encryptedDir.prefix == "" then key
-    else lib.removePrefix "${entry.encryptedDir.prefix}/" key;
+    if entry._prefix == "" then key
+    else lib.removePrefix "${entry._prefix}/" key;
 
   toSecrets = entry:
     let
       keys = filesLib.sopsKeys {
-        sopsFile = entry.encryptedDir.sopsFile;
-        prefix = entry.encryptedDir.prefix;
+        sopsFile = entry.sopsFile;
+        prefix = entry._prefix;
       };
       # A bare (no leading "/") identifier is used verbatim as each leaf's sops.secrets name --
       # entry.path is then just sops-nix's own "/run/secrets/<id>" default (see
@@ -36,7 +36,7 @@ let
       (key: {
         name = "${base}/${relpath entry key}";
         value = {
-          sopsFile = entry.encryptedDir.sopsFile;
+          sopsFile = entry.sopsFile;
           inherit key;
           owner = entry.user;
           group = entry.group;

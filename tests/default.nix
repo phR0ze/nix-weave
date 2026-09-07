@@ -47,7 +47,7 @@ pkgs.testers.runNixOSTest {
     # -- files.secrets: bare (no leading "/") identifier with an explicit key override -- no
     # install path given up front, so it defaults to sops-nix's own "/run/secrets/<name>"
     # convention --
-    files.secrets."newt-client-secret".encrypted = {
+    files.secrets."newt-client-secret" = {
       sopsFile = ./fixtures/secrets.enc.yaml;
       key = "newt/clientSecret";
     };
@@ -67,12 +67,12 @@ pkgs.testers.runNixOSTest {
     # it defaults to sops-nix's own "/run/secrets/<name>" convention, with the identifier
     # doubling as the sops key lookup (both default to "newt/clientSecret") exactly like an
     # ordinary config.sops.secrets."newt/clientSecret" left at its default path --
-    files.secrets."newt/clientSecret".encrypted.sopsFile = ./fixtures/secrets.enc.yaml;
+    files.secrets."newt/clientSecret".sopsFile = ./fixtures/secrets.enc.yaml;
 
     # -- files.secrets: directory fanned out into one sops.secrets entry per leaf, bare (no
     # leading "/") identifier -- each leaf defaults to sops-nix's own "/run/secrets/<name>/<leaf>"
     # path --
-    files.secrets."nginx/certs".encryptedDir = { sopsFile = ./fixtures/certs.enc.yaml; prefix = "nginx/certs"; };
+    files.secrets."nginx/certs" = { sopsFile = ./fixtures/certs.enc.yaml; prefix = "nginx/certs"; };
 
     # -- owner resolved from a decrypted secret, never appearing in cleartext config --
     files.any."/opt/svc/data" = {

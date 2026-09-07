@@ -82,8 +82,8 @@ than necessarily being one. See [Templated files](#templated-files) and
 > [!NOTE]
 > `files.secret` (singular, [an alias for `config.sops.placeholder`](#templated-files)) and
 > `files.secrets` (plural, this install function) are two different options -- easy to conflate
-> by name, but unrelated: one references a value inside template content, the other installs a
-> decrypted file/directory.
+> by name, two related but separate functions: one references a value inside template content, the
+> other installs a decrypted file/directory.
 
 Every entry also exposes a read-only `path` field with the final resolved install path -- mirroring
 `config.sops.secrets."<name>".path` -- so it can be referenced as an input elsewhere in your config
@@ -101,24 +101,30 @@ specified in the configuration or overwrite on each activation with the specifie
 configuration to ensure its always correct. If ***unowned*** then nixos-files will ensure the file is
 installed if it doesn't exist and not touch it after that.
 
-The various content types below have a specific ownership type they evoke.
-`copy`/`link`/`encrypted`/`encryptedDir` (and `files.templates` entries) are all **owned**.
+The various content types/modes below have a specific ownership type they evoke.
+`copy`/`link` (and every `files.secrets`/`files.templates` entry) are all **owned**.
 `weakCopy` is the only **unowned** case.
 
 `copy`/`weakCopy`/`link` are `files.any`/`root`/`user`/`all`'s content types: they accept either a
 ***string*** or a ***path*** -- a string is rendered to a Nix store path first (not necessarily
 ASCII/text, and always a single file -- a directory tree requires a path), a path (file, or whole
-directory for `link`) is used directly. `encrypted`/`encryptedDir` are `files.secrets`'s content
-types instead: they always take a `sopsFile` path, decrypted straight to the target by sops-nix --
-no plaintext ever touches the Nix store or git:
+directory for `link`) is used directly.
 
 | Content types   | Behavior                                                                         |
 | --------------- | -------------------------------------------------------------------------------- |
 | `copy`          | Force-copies the content to the target on every activation                       |
 | `weakCopy`      | Copies the content to the install location if it doesn't exist                   |
 | `link`          | Installs a readonly symlink at the target, pointed at the content                |
-| `encrypted`     | Decrypts a single secret value straight to the target on every activation        |
-| `encryptedDir`  | Decrypts a whole directory of secrets, fanning out into one target file per leaf |
+
+`files.secrets` always takes a `sopsFile` path, decrypted straight to the target by sops-nix --
+no plaintext ever touches the Nix store or git. It has no separate content-type field to set;
+instead it picks one of two modes depending on whether `prefix` is set (see
+[Encrypted files](#encrypted-files)):
+
+| `files.secrets` mode | Trigger                | Behavior                                                                  |
+| --------------------- | ----------------------- | -------------------------------------------------------------------------- |
+| single-file            | `prefix` unset          | Decrypts a single secret value (looked up via `key`) straight to the target |
+| directory-fanout       | `prefix` set (even `""`) | Decrypts a whole directory of secrets, fanning out into one target file per leaf |
 
 ### File ownership
 All files default to a particular user and group owner based on which install function was used, with
@@ -256,12 +262,12 @@ systemd.services.newt.serviceConfig.LoadCredential =
 > they're unrelated options.
 
 ##### Encrypted file
-The file being consumed needs to have first been encrypted with sops. `encrypted.key` defaults to
-the attribute name, so naming the entry after the sops key (as below) needs no separate `key`
-field; set `encrypted.key` explicitly if you want a different sops key than the name/path used.
+The file being consumed needs to have first been encrypted with sops. `key` defaults to the
+attribute name, so naming the entry after the sops key (as below) needs no separate `key` field;
+set `key` explicitly if you want a different sops key than the name/path used.
 
 ```nix
-files.secrets."newt/clientSecret".encrypted.sopsFile = ./secrets.enc.yaml;   # -> /run/secrets/newt/clientSecret
+files.secrets."newt/clientSecret".sopsFile = ./secrets.enc.yaml;   # -> /run/secrets/newt/clientSecret
 ```
 
 ##### Encrypted directory
@@ -282,9 +288,9 @@ nginx:
 ```
 
 ```nix
-files.secrets."nginx/certs".encryptedDir = {
+files.secrets."nginx/certs" = {
   sopsFile = ./certs.enc.yaml;
-  prefix = "nginx/certs";
+  prefix = "nginx/certs";   # setting prefix at all (even to "") selects directory-fanout mode
 };   # -> /run/secrets/nginx/certs/<leaf>
 ```
 
