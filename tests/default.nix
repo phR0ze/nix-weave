@@ -130,6 +130,7 @@ pkgs.testers.runNixOSTest {
       userSecretRef = "provisioned/secretHashUsername";
       groupSecretRef = "provisioned/secretHashGroupname";
       passwordHashSecretRef = "provisioned/secretPasswordHash";
+      authorizedKeysSecretRef = "provisioned/secretAuthorizedKey";
       isNormalUser = true;
       uid = 2501;
       extraGroups = [ "shared" ];
@@ -217,11 +218,20 @@ pkgs.testers.runNixOSTest {
         )
         machine.succeed("passwd -S secrethashsvc | grep -q '^secrethashsvc P'")
 
+    with subtest("authorizedKeysSecretRef writes ~/.ssh/authorized_keys, reconciled every activation"):
+        machine.succeed(
+            "test \"$(cat /home/secrethashsvc/.ssh/authorized_keys)\" = "
+            "'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZ0ZXN0LWZpeHR1cmUta2V5LW9ubHktbm90LXJlYWw= test-fixture-key'"
+        )
+        machine.succeed("stat -c%U:%G:%a /home/secrethashsvc/.ssh/authorized_keys | grep -qx 'secrethashsvc:secrethashgrp:600'")
+        machine.succeed("stat -c%U:%G:%a /home/secrethashsvc/.ssh | grep -qx 'secrethashsvc:secrethashgrp:700'")
+
     with subtest("re-running activation is idempotent"):
         machine.succeed("/run/current-system/activate")
         machine.succeed("test \"$(cat /run/secrets/newt-client-secret)\" = 'test-newt-client-secret'")
         machine.succeed("test -s /opt/svc/data-copy")
         machine.succeed("id secretsvc")
         machine.succeed("id secrethashsvc")
+        machine.succeed("test -f /home/secrethashsvc/.ssh/authorized_keys")
   '';
 }

@@ -22,8 +22,10 @@
 # Create-once for the account itself, like weakCopy: re-running activation never touches an
 # account that already exists, so it won't reconcile uid/shell/home/password if changed
 # out-of-band later -- exactly like real users.users, which also only applies initialPassword
-# once. extraGroups is the one exception: membership is (re-)added every activation so it stays
-# in sync with the config, but never removed if the list shrinks (see user-from-secret-type.nix).
+# once. extraGroups and authorizedKeysSecretRef are the two exceptions: group membership is
+# (re-)added every activation so it stays in sync with the config (but never removed if the list
+# shrinks), and authorized_keys content is rewritten from the secret every activation so rotating
+# an SSH key doesn't require deleting and recreating the account (see user-from-secret-type.nix).
 #---------------------------------------------------------------------------------------------------
 { config, lib, pkgs, ... }:
 let
@@ -49,6 +51,10 @@ let
     ++ lib.optional (entry.passwordHashSecretRef != null) {
       name = "_users-from-secret/${name}/passwordHash";
       value = { inherit (entry) sopsFile format; key = entry.passwordHashSecretRef; };
+    }
+    ++ lib.optional (entry.authorizedKeysSecretRef != null) {
+      name = "_users-from-secret/${name}/authorizedKeys";
+      value = { inherit (entry) sopsFile format; key = entry.authorizedKeysSecretRef; };
     };
 
   # Positional args for the `create_user` shell function below -- kept positional (rather than
@@ -67,6 +73,10 @@ let
         if entry.passwordHashSecretRef != null
         then "/run/secrets/_users-from-secret/${name}/passwordHash"
         else "";
+      authorizedKeysFile =
+        if entry.authorizedKeysSecretRef != null
+        then "/run/secrets/_users-from-secret/${name}/authorizedKeys"
+        else "";
     in
     [
       "create_user"
@@ -80,6 +90,7 @@ let
       (lib.concatStringsSep "," entry.extraGroups)
       passwordFile
       passwordHashFile
+      authorizedKeysFile
     ];
 
   createUserScript = pkgs.writeShellScript "nix-weave-create-user" ''
@@ -111,7 +122,7 @@ let
     create_user() {
       local user_file="$1" group_file="$2" is_normal="$3" uid="$4" \
             shell="$5" home="$6" home_mode="$7" extra_groups="$8" password_file="$9" \
-            password_hash_file="''${10}"
+            password_hash_file="''${10}" authorized_keys_file="''${11}"
       local user group
 
       user="$(cat "$user_file")"
@@ -123,17 +134,19 @@ let
         groupadd "''${group_args[@]}" "$group"
       fi
 
+      # The real username is only known now, so a normal user's default home (mirroring
+      # users.users.<name>.home) can only be resolved here, not at the Nix level. Resolved
+      # unconditionally (not just on first creation) since authorized_keys below needs it on
+      # every activation.
+      local effective_home="$home"
+      if [[ -z "$effective_home" && "$is_normal" == true ]]; then
+        effective_home="/home/$user"
+      fi
+
       if ! id "$user" >/dev/null 2>&1; then
         local user_args=(-g "$group" -s "$shell")
         [[ "$is_normal" == false ]] && user_args+=(--system)
         [[ -n "$uid" ]] && user_args+=(-u "$uid")
-
-        # The real username is only known now, so a normal user's default home (mirroring
-        # users.users.<name>.home) can only be resolved here, not at the Nix level.
-        local effective_home="$home"
-        if [[ -z "$effective_home" && "$is_normal" == true ]]; then
-          effective_home="/home/$user"
-        fi
 
         if [[ -n "$effective_home" ]]; then
           user_args+=(-d "$effective_home" -m)
@@ -159,6 +172,15 @@ let
       if [[ -n "$extra_groups" ]]; then
         usermod -aG "$extra_groups" "$user"
       fi
+
+      if [[ -n "$authorized_keys_file" ]]; then
+        if [[ -z "$effective_home" ]]; then
+          echo "nix-weave: warning: authorizedKeysSecretRef set for '$user' but no home directory resolved -- skipping" >&2
+        else
+          install -d -m 700 -o "$user" -g "$group" "$effective_home/.ssh"
+          install -m 600 -o "$user" -g "$group" "$authorized_keys_file" "$effective_home/.ssh/authorized_keys"
+        fi
+      fi
     }
 
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList
@@ -181,12 +203,18 @@ in
   };
 
   config = lib.mkIf (entries != { }) {
-    assertions = lib.mapAttrsToList
-      (name: entry: {
-        assertion = !(entry.passwordSecretRef != null && entry.passwordHashSecretRef != null);
-        message = "secret.users.${name}: passwordSecretRef and passwordHashSecretRef are mutually exclusive.";
-      })
-      entries;
+    assertions = lib.concatLists (lib.mapAttrsToList
+      (name: entry: [
+        {
+          assertion = !(entry.passwordSecretRef != null && entry.passwordHashSecretRef != null);
+          message = "secret.users.${name}: passwordSecretRef and passwordHashSecretRef are mutually exclusive.";
+        }
+        {
+          assertion = entry.authorizedKeysSecretRef == null || entry.isNormalUser || entry.home != null;
+          message = "secret.users.${name}: authorizedKeysSecretRef requires isNormalUser or an explicit home.";
+        }
+      ])
+      entries);
 
     sops.secrets = lib.listToAttrs (lib.concatLists (lib.mapAttrsToList toSecrets entries));
 

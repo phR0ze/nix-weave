@@ -117,6 +117,19 @@ with lib.types; attrsOf (submodule (
           at all, even transiently. Mutually exclusive with passwordSecretRef.
         '';
       };
+
+      authorizedKeysSecretRef = lib.mkOption {
+        type = nullOr str;
+        default = null;
+        description = ''
+          Key within sopsFile whose decrypted value is this account's entire authorized_keys file
+          body (one public key per line), like users.users.<name>.openssh.authorizedKeys.keys --
+          unlike the other secret-sourced fields here, this is written to
+          $home/.ssh/authorized_keys on *every* activation (not just account creation), so
+          rotating the key doesn't require recreating the account. Requires a home directory
+          (isNormalUser or an explicit `home`).
+        '';
+      };
     };
   }
 ))
