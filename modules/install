@@ -183,15 +183,21 @@ link() {
 }
 
 # Create the file or link
+# - $3 is the entry's path *inside* the files package, which is only the same as $2 for a
+#   non-placeholder destination. The /nix/files indirection has to be built from the package-
+#   relative path, not the expanded one: expand_target rewrites a "/@secret-user/<entry>/..."
+#   destination to the account's real home, but the package still lays the content out under
+#   the placeholder, so deriving _inter from $2 yields a symlink into /nix/files/home/<user>/...
+#   which does not exist -- every link entry for a secret.users account lands broken.
 mkfile() {
-  local _src="${1}" _target="${2}"
+  local _src="${1}" _target="${2}" _pkgpath="${3:-$2}"
 
   mkdir_p "$(dirname "$_target")"
 
   if [[ "$kind" == "copy" ]]; then
     copy "$_src" "$_target"
   elif [[ "$kind" == "link" ]]; then
-    local _inter="${files}${_target}"
+    local _inter="${files}${_pkgpath}"
     link "$_src" "$_inter" "$_target"
   fi
 
@@ -213,13 +219,13 @@ mkfiles() {
       log " skipping: $_relpath (no home directory resolved for its secret.users account)"
       continue
     fi
-    mkfile "$src" "$_target"
+    mkfile "$src" "$_target" "$_relpath"
   done
 }
 
 # Loop through directories, installing every file they contain
 mkdirs() {
-  local _relpath _expanded _target
+  local _relpath _expanded _suffix
   find "$pkg" -name "*.meta.dir" | while read -r x; do
     metadata "$x"
     _relpath="${x#"$pkg"}"
@@ -228,13 +234,13 @@ mkdirs() {
       log " skipping: $_relpath (no home directory resolved for its secret.users account)"
       continue
     fi
-    _relpath="$_expanded"
-    mkdir_p "$_relpath"
+    mkdir_p "$_expanded"
 
+    # _relpath stays the package-relative path here so mkfile can build the /nix/files
+    # indirection from it; only the destination gets the expanded home.
     find "$src" -type f | while read -r y; do
-      _target="${y#"$src"}"
-      _target="${_relpath}${_target}"
-      mkfile "$y" "$_target"
+      _suffix="${y#"$src"}"
+      mkfile "$y" "${_expanded}${_suffix}" "${_relpath}${_suffix}"
     done
   done
 }
