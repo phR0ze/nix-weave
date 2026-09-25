@@ -169,6 +169,25 @@ pkgs.testers.runNixOSTest {
       uid = 2501;
       extraGroups = [ "shared" ];
     };
+
+    # -- secret.templates with homePath: rendered *secret* content fanned out per account, the
+    # way files.all does for plaintext. This is the only way to get a secret value into a
+    # secret.users account's home, since sops-nix can only render to one eval-time-fixed path --
+    secret.templates."per-user-token" = {
+      homePath = ".config/example/token.conf";
+      filemode = "0600";
+      dirmode = "0700";
+      content = "zone=${config.secret.ref."caddy/cfZone"}\n";
+      secrets."caddy/cfZone".sopsFile = ./fixtures/secrets.enc.yaml;
+    };
+
+    # -- same, but with files.user rather than files.all semantics (no /root copy) --
+    secret.templates."per-user-only-token" = {
+      homePath = ".config/example-user-only/user-only.conf";
+      includeRoot = false;
+      content = "zone=${config.secret.ref."caddy/cfZone"}\n";
+      secrets."caddy/cfZone".sopsFile = ./fixtures/secrets.enc.yaml;
+    };
   };
 
   testScript = ''
@@ -190,6 +209,15 @@ pkgs.testers.runNixOSTest {
         for path, owner in [("/root/.motd", "root"), ("/home/alice/.motd", "alice"), ("/home/bob/.motd", "bob")]:
             machine.succeed(f"test \"$(cat {path})\" = 'welcome'")
             machine.succeed(f"stat -c%U {path} | grep -qx {owner}")
+
+    with subtest("files.user/files.all also reach secret.users accounts, whose home is only known at activation"):
+        for user, group in [("secretsvc", "secretgrp"), ("secrethashsvc", "secrethashgrp")]:
+            machine.succeed(f"test \"$(cat /home/{user}/.config/example.conf)\" = 'example=1'")
+            machine.succeed(f"stat -c%U:%G /home/{user}/.config/example.conf | grep -qx '{user}:{group}'")
+            machine.succeed(f"test \"$(cat /home/{user}/.motd)\" = 'welcome'")
+            machine.succeed(f"stat -c%U:%G /home/{user}/.motd | grep -qx '{user}:{group}'")
+        # the placeholder destination must never survive into the real filesystem
+        machine.fail("test -e /@secret-user")
 
     with subtest("directory installed via the link engine, one symlink per leaf file"):
         machine.succeed("test -d /home/alice/.config/menus && test ! -L /home/alice/.config/menus")
@@ -226,6 +254,36 @@ pkgs.testers.runNixOSTest {
     with subtest("secret.templates.\"cloudflare-env\".path resolves to the real rendered file when used as an input elsewhere"):
         machine.wait_for_unit("cloudflare-env-check.service")
         machine.succeed("test \"$(cat /run/cloudflare-env-check-zone)\" = 'test-cf-zone.example.com'")
+
+    with subtest("secret.templates homePath fans rendered secret content out per account"):
+        targets = [
+            ("/root", "root", "root"),
+            ("/home/alice", "alice", "alice"),
+            ("/home/bob", "bob", "bob"),
+            ("/home/secretsvc", "secretsvc", "secretgrp"),
+            ("/home/secrethashsvc", "secrethashsvc", "secrethashgrp"),
+        ]
+        for home, owner, group in targets:
+            path = f"{home}/.config/example/token.conf"
+            machine.succeed(f"test \"$(cat {path})\" = 'zone=test-cf-zone.example.com'")
+            machine.succeed(f"stat -c%U:%G:%a {path} | grep -qx '{owner}:{group}:600'")
+            machine.succeed(f"stat -c%a {home}/.config/example | grep -qx 700")
+        # the staging file the copies come from stays root-only
+        machine.succeed("stat -L -c%U:%G:%a /run/secrets/rendered/per-user-token | grep -qx 'root:root:400'")
+
+    with subtest("secret.templates homePath with includeRoot = false skips the /root copy"):
+        machine.succeed("test -e /home/alice/.config/example-user-only/user-only.conf")
+        machine.succeed("test -e /home/secretsvc/.config/example-user-only/user-only.conf")
+        machine.fail("test -e /root/.config/example-user-only/user-only.conf")
+
+    with subtest("homePath copies are content-stamped: app-written state survives re-activation"):
+        machine.succeed("echo 'written-by-the-app' >> /home/alice/.config/example/token.conf")
+        machine.succeed("/run/current-system/activate")
+        machine.succeed("grep -q '^written-by-the-app$' /home/alice/.config/example/token.conf")
+        # ... but a copy deleted out-of-band is reinstalled
+        machine.succeed("rm /home/bob/.config/example/token.conf")
+        machine.succeed("/run/current-system/activate")
+        machine.succeed("test \"$(cat /home/bob/.config/example/token.conf)\" = 'zone=test-cf-zone.example.com'")
 
     with subtest("user/group created at activation from decrypted secrets, with users.users parity"):
         machine.succeed("getent group secretgrp")
@@ -285,5 +343,11 @@ pkgs.testers.runNixOSTest {
         machine.succeed("id secretsvc")
         machine.succeed("id secrethashsvc")
         machine.succeed("test -f /home/secrethashsvc/.ssh/authorized_keys")
+        machine.succeed("test -f /home/secretsvc/.config/example.conf")
+        machine.succeed("test -f /home/secretsvc/.config/example/token.conf")
+        # update-users-groups.pl rewrites /etc/subuid from its own declarative user list on every
+        # activation, so a range allocated only at account creation would silently disappear here
+        machine.succeed("grep -qE '^secretsvc:[0-9]+:65536$' /etc/subuid")
+        machine.succeed("grep -qE '^secretsvc:[0-9]+:65536$' /etc/subgid")
   '';
 }

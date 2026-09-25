@@ -165,8 +165,15 @@ let
         elif [[ -n "$password_hash_file" ]]; then
           chpasswd -e <<< "$user:$(cat "$password_hash_file")"
         fi
+      fi
 
-        [[ "$is_normal" == true ]] && allocate_subid_range "$user"
+      # Re-checked on every activation, not just on account creation: NixOS's own
+      # update-users-groups.pl rewrites /etc/subuid and /etc/subgid from its declarative user
+      # list, which this account isn't part of, so a range allocated once at creation would be
+      # dropped again on the next rebuild. allocate_subid_range already no-ops when the account
+      # still has an entry, so re-running it just restores one when it went missing.
+      if [[ "$is_normal" == true ]]; then
+        allocate_subid_range "$user"
       fi
 
       if [[ -n "$extra_groups" ]]; then

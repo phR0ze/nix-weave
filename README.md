@@ -18,11 +18,13 @@ copy/link installation is handled by a small activation script.
 - [Usage](#usage)
   - [Dedupe sops-nix](#dedupe-sops-nix)
   - [Plaintext files](#plaintext-files)
+    - [Real users](#real-users)
   - [Owner resolved from a secret](#owner-resolved-from-a-secret)
   - [Encrypted files](#encrypted-files)
     - [Encrypted file](#encrypted-file)
     - [Encrypted directory](#encrypted-directory)
   - [Templated files](#templated-files)
+    - [Fanning a template out per user](#fanning-a-template-out-per-user)
   - [User created from a secret](#user-created-from-a-secret)
   - [Restarting units on change](#restarting-units-on-change)
 - [Running the examples](#running-the-examples)
@@ -74,10 +76,10 @@ than necessarily being one. See [Templated files](#templated-files) and
 | ------------------- | ---------------------------------------------------------------------
 | `files.any`         | installs plaintext files at an arbitrary location on disk
 | `files.root`        | installs plaintext files relative to `/root/`
-| `files.user`        | installs plaintext files for all real users i.e. `isNormalUser = true`
-| `files.all`         | installs plaintext files for both `/root/<name>` and `$HOME/<name>` for every real user
+| `files.user`        | installs plaintext files for every real user (see [real users](#real-users)) i.e. `isNormalUser = true`
+| `files.all`         | `files.root` + `files.user`: installs plaintext files for `/root/<name>` **and** `$HOME/<name>` for every real user (see [real users](#real-users))
 | `secret.files`      | decrypts a sops-encrypted file/directory straight to the target via sops-nix's own `sops.secrets`
-| `secret.templates`  | renders a file mixing plaintext and secret fields via sops-nix's template engine
+| `secret.templates`  | renders a file mixing plaintext and secret fields via sops-nix's template engine, optionally fanned out per user via `homePath`
 | `secret.users`      | installs a new user/group idempotently from secrets to avoid exposing PII
 
 > [!NOTE]
@@ -217,6 +219,23 @@ files.user.".config/menus".link = ../include/xfce-menus;        # -> every real 
 files.all.".motd".copy = "welcome\n";                           # -> /root/.motd and every real user's $HOME/.motd
 ```
 
+#### Real users
+Wherever this README says ***every real user*** -- `files.user`, `files.all`'s per-user half, and
+`secret.templates`' [`homePath`](#fanning-a-template-out-per-user) fan-out -- it means both of:
+
+* every `config.users.users` entry with `isNormalUser = true`
+* every [`secret.users`](#user-created-from-a-secret) account that ends up with a home directory
+  (`isNormalUser = true`, or an explicit `home`)
+
+The second group's account name -- and therefore its home directory -- isn't known at eval time,
+that being the entire point of the namespace. So those instances carry a placeholder destination
+that the install script rewrites to the real home once sops-nix has decrypted the name, ordered
+after the account itself has been created. An account whose home can't be resolved is skipped with
+a warning rather than failing the activation.
+
+`files.all` is exactly `files.root` + `files.user`, so it covers `/root` plus every real user in
+both groups -- there is no account `files.user` reaches that `files.all` doesn't.
+
 #### Owner resolved from a secret
 When you don't want to expose the user owner or group during plaintext file installation you can use
 secret references. `user` and `group` can each independently be a plain string or a `secretRef`
@@ -325,6 +344,33 @@ secret.templates."cloudflare-env" = {
   };
 };
 ```
+
+##### Fanning a template out per user
+sops-nix bakes `sops.templates.<name>.path` into its own activation script at eval time, so a
+template can only ever render to one fixed path -- which can't be a [`secret.users`](#user-created-from-a-secret)
+account's home directory, since that account's name isn't known until the same activation decrypts
+it. Set `homePath` instead and nix-weave keeps the rendered file at `path` as a root-only
+(`root:root`, `0400`) staging file, then installs a copy at `<home>/<homePath>` for every
+[real user](#real-users) -- plus `/root`, unless `includeRoot = false` turns it into `files.user`
+rather than `files.all` semantics. `user`/`group` are ignored in this mode (the real per-account owner always wins, exactly
+as for `files.user`/`files.all`) while `filemode`/`dirmode` apply to the installed copies.
+
+```nix
+secret.templates."rustdesk-pass" = {
+  homePath = ".config/rustdesk/RustDesk.toml";
+  filemode = "0600";
+  content = "password = '${config.secret.ref."rustdesk/encodedPass"}'\n";
+  secrets."rustdesk/encodedPass".sopsFile = ./secrets.enc.yaml;
+};
+```
+
+Copies are **content-stamped** rather than force-overwritten: nix-weave records a hash of the
+rendered content per destination and only reinstalls when that rendering actually changes, or when
+the copy has gone missing. A plain `copy` would clobber whatever the owning application wrote back
+into its own config file on every activation, and a `weakCopy` would never propagate a rotated
+secret -- stamping gets both. In the example above RustDesk's own generated device id, written into
+the same file on first run, survives unrelated rebuilds while a genuinely rotated password still
+lands.
 
 `config.secret.ref."<key>"` is a read-only alias for sops-nix's own
 `config.sops.placeholder."<key>"` -- same value, same restriction (only meaningful inside

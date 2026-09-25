@@ -29,9 +29,12 @@ let
     value =
       {
         path = entry._target;
-        owner = ownerStr entry.user;
-        group = ownerStr entry.group;
-        mode = entry.filemode;
+        # A homePath entry's sops.templates file is only the root-only staging file the per-user
+        # copies get installed from (see user-templates.nix), never a final destination -- so
+        # owner/mode describe those copies instead and the staging file stays root:root 0400.
+        owner = if entry.homePath != null then "root" else ownerStr entry.user;
+        group = if entry.homePath != null then "root" else ownerStr entry.group;
+        mode = if entry.homePath != null then "0400" else entry.filemode;
         inherit (entry) restartUnits reloadUnits;
         # Lazily coerced (not `optionalAttrs (... != null)`) so building the sops.templates
         # attrset never forces `content` -- doing so would recurse, since `content` may

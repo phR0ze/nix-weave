@@ -68,11 +68,20 @@ let
   installScript = pkgs.writeShellScript "nix-weave-install" (lib.fileContents ./install);
 
   usesSecretOwner = lib.any (e: !(builtins.isString e.user) || !(builtins.isString e.group)) anyFiles;
+
+  # Entries aimed at a secret.users account can't be installed until that account exists, since
+  # the installer resolves its home out of the passwd database (see `expand_target` in install).
+  # usersFromSecret only exists as an activation script when secret.users is non-empty, which is
+  # exactly when collect.nix can have emitted one of these -- but the dependency is still made
+  # conditional so naming it can never fail the activation script's own closure.
+  usesSecretUsers = lib.any (e: lib.hasPrefix "${filesLib.secretUserPrefix}/" e.path) anyFiles;
 in
 {
   config = lib.mkIf (anyFiles != [ ]) {
     system.activationScripts.files = lib.stringAfter
-      ([ "etc" "users" "groups" ] ++ lib.optional usesSecretOwner "setupSecrets")
+      ([ "etc" "users" "groups" ]
+        ++ lib.optional usesSecretOwner "setupSecrets"
+        ++ lib.optional usesSecretUsers "usersFromSecret")
       ''${installScript} ${filesPackage} "/nix"'';
   };
 }

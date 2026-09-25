@@ -7,9 +7,9 @@
 #   files.all.<name>   -- files.root + files.user combined (root's copy + every real user's copy)
 #
 # files.user/files.all entries' attribute names are home-relative (e.g. ".dircolors", not
-# "/root/.dircolors") and get expanded into one instance per real user (every
-# config.users.users entry with isNormalUser = true) in collect.nix -- nix-weave has no
-# notion of a single "primary" user. Any `user`/`group` set on a files.user/files.all entry is
+# "/root/.dircolors") and get expanded into one instance per real user in collect.nix -- both
+# every config.users.users entry with isNormalUser = true and every secret.users account that
+# ends up with a home directory. nix-weave has no notion of a single "primary" user. Any `user`/`group` set on a files.user/files.all entry is
 # ignored; the real per-user (or root, for files.all's root copy) owner is always used.
 #
 # The attribute name is always the install path (prefixed per-namespace below); there is no
@@ -49,9 +49,11 @@ in
       type = types.fileType { user = "root"; group = "root"; prefix = ""; };
       default = { };
       description = ''
-        Files installed under every real user's home directory (config.users.users entries with
-        isNormalUser = true). The attribute name is home-relative, e.g. ".config/menus", not an
-        absolute path.
+        Files installed under every real user's home directory: every config.users.users entry
+        with isNormalUser = true, plus every secret.users account that ends up with a home
+        directory (whose real home is only resolved at activation time, once sops-nix has
+        decrypted the account name). The attribute name is home-relative, e.g. ".config/menus",
+        not an absolute path.
       '';
       example = ''
         files.user.".config/menus".link = ../include/xfce-menus;
@@ -62,9 +64,10 @@ in
       type = types.fileType { user = "root"; group = "root"; prefix = ""; };
       default = { };
       description = ''
-        Files installed both for root (/root/<name>) and for every real user
-        (config.users.users entries with isNormalUser = true, at $HOME/<name>). The attribute
-        name is home-relative, not an absolute path.
+        files.root + files.user: installed both for root (/root/<name>) and for every real user
+        at $HOME/<name> -- every config.users.users entry with isNormalUser = true plus every
+        secret.users account that ends up with a home directory, exactly the same set files.user
+        covers. The attribute name is home-relative, not an absolute path.
       '';
     };
   };

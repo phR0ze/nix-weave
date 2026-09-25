@@ -29,6 +29,43 @@ with lib.types; attrsOf (submodule (
           Absolute path where the rendered file is installed. Mirrors sops-nix's own
           sops.templates.<name>.path -- defaults to /run/secrets/rendered/<name>, but should
           normally be overridden (e.g. "/run/caddy/cloudflare.env").
+
+          Leave this alone when using `homePath`: that mode keeps `path` as the root-only
+          staging file the per-user copies are installed from.
+        '';
+      };
+
+      homePath = lib.mkOption {
+        type = nullOr str;
+        default = null;
+        example = ".config/rustdesk/RustDesk.toml";
+        description = ''
+          Home-relative destination to fan this template out to, the way files.all does for
+          plaintext content: one copy per real user (every config.users.users entry with
+          isNormalUser = true, plus every config.secret.users account that has a home
+          directory), each owned by that account, plus a /root copy unless includeRoot is false.
+
+          sops-nix bakes sops.templates.<name>.path into its own activation script at eval time,
+          so it can't be pointed at a home directory that's only known once a secret.users
+          account has been decrypted. Setting this instead leaves the rendered file at `path` as
+          a root-only (root:root, 0400) staging file and has nix-weave install it to
+          "<home>/<homePath>" afterwards. `user`/`group` are ignored (the real per-account owner
+          always wins, same as files.user/files.all), while `filemode`/`dirmode` apply to the
+          installed copies rather than to the staging file.
+
+          Copies are refreshed only when the *rendered content* changes, not on every
+          activation, so state an application writes back into its own config file (RustDesk's
+          generated device id, say) survives an unrelated rebuild while an actually-rotated
+          secret still propagates. A copy deleted out-of-band is reinstalled.
+        '';
+      };
+
+      includeRoot = lib.mkOption {
+        type = bool;
+        default = true;
+        description = ''
+          Whether the homePath fan-out also installs a /root copy: true mirrors files.all, false
+          mirrors files.user. No effect unless homePath is set.
         '';
       };
 

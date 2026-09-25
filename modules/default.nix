@@ -13,6 +13,7 @@
     ./secrets-dir.nix
     ./secret.nix
     ./templates.nix
+    ./user-templates.nix
     ./users-from-secret.nix
     ./tmpfiles.nix
   ];

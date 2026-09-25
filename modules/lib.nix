@@ -10,6 +10,15 @@
   # ownership so two entries never collide even if their targets differ only slightly.
   ownerSecretId = target: builtins.substring 0 12 (builtins.hashString "sha256" target);
 
+  # Placeholder root segment for a files.user/files.all entry aimed at a `secret.users` account.
+  # Such an account's real name -- and therefore its home directory -- is only known once
+  # sops-nix has decrypted it at activation time, but the plaintext engine needs a destination at
+  # eval time to lay the filesPackage out with. So collect.nix emits
+  # "<secretUserPrefix>/<secret.users attr name>/<home-relative path>" and the install script
+  # rewrites that to "<real home>/<home-relative path>" once it can resolve the name (see
+  # `expand_target` in modules/install).
+  secretUserPrefix = "/@secret-user";
+
   fromJSON = jsonFile: builtins.fromJSON (builtins.readFile jsonFile);
 
   fromYAML = yamlFile:

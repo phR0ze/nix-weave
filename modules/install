@@ -37,6 +37,46 @@ resolve_owner() {
   esac
 }
 
+# Look a username up in the passwd database and print its home directory. Deliberately reads
+# /etc/passwd with the shell rather than shelling out to getent, so this depends on nothing
+# beyond what the activation script already has.
+passwd_home() {
+  local _want="$1" _name _home
+  while IFS=: read -r _name _ _ _ _ _home _; do
+    if [[ "$_name" == "$_want" ]]; then
+      printf '%s' "$_home"
+      return 0
+    fi
+  done < /etc/passwd
+  return 1
+}
+
+# Rewrite a "@secret-user/<entry>/<relative path>" placeholder destination (emitted by
+# collect.nix for files.user/files.all entries aimed at a secret.users account) into the real
+# "<home>/<relative path>". The account's name comes from the same @secret: sentinel the owner
+# fields already carry, so nothing here needs to know how users-from-secret.nix names its own
+# internal secrets. Prints the destination unchanged when it isn't a placeholder; fails when the
+# account has no resolvable home, so the caller can skip the entry rather than installing into
+# a bogus path.
+expand_target() {
+  local _target="$1"
+  case "$_target" in
+    /@secret-user/*)
+      local _rest _owner _home
+      _rest="${_target#/@secret-user/}"      # <entry>/<relative path>
+      _rest="${_rest#*/}"                    # <relative path>
+      _owner="$(resolve_owner "$user")"
+      [[ -n "$_owner" ]] || return 1
+      _home="$(passwd_home "$_owner")" || return 1
+      [[ -n "$_home" ]] || return 1
+      printf '%s/%s' "$_home" "$_rest"
+      ;;
+    *)
+      printf '%s' "$_target"
+      ;;
+  esac
+}
+
 # Clean up any files left over from the previous install
 clean() {
   readarray -t owned_new < "$owned_log"
@@ -164,23 +204,31 @@ mkfile() {
 
 # Loop through single files
 mkfiles() {
-  local _relpath _target
+  local _relpath _expanded _target
   find "$pkg" -name "*.meta.file" | while read -r x; do
     metadata "$x"
     _relpath="${x#"$pkg"}"
     _relpath="${_relpath%".meta.file"}"
-    _target="${_relpath}"
+    if ! _target="$(expand_target "$_relpath")"; then
+      log " skipping: $_relpath (no home directory resolved for its secret.users account)"
+      continue
+    fi
     mkfile "$src" "$_target"
   done
 }
 
 # Loop through directories, installing every file they contain
 mkdirs() {
-  local _relpath _target
+  local _relpath _expanded _target
   find "$pkg" -name "*.meta.dir" | while read -r x; do
     metadata "$x"
     _relpath="${x#"$pkg"}"
     _relpath="${_relpath%".meta.dir"}"
+    if ! _expanded="$(expand_target "$_relpath")"; then
+      log " skipping: $_relpath (no home directory resolved for its secret.users account)"
+      continue
+    fi
+    _relpath="$_expanded"
     mkdir_p "$_relpath"
 
     find "$src" -type f | while read -r y; do
