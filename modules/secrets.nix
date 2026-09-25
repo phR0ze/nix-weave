@@ -34,6 +34,7 @@ let
       owner = entry.user;
       group = entry.group;
       mode = entry.filemode;
+      inherit (entry) restartUnits reloadUnits;
     } // lib.optionalAttrs (!entry._usesDefaultSopsPath) { path = entry.path; };
   };
 in

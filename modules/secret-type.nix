@@ -97,6 +97,28 @@ with lib.types; attrsOf (submodule (
         '';
       };
 
+      restartUnits = lib.mkOption {
+        type = listOf str;
+        default = [ ];
+        example = [ "harmonia.service" ];
+        description = ''
+          Units to restart when this entry's decrypted content changes, passed straight through
+          to sops-nix's own sops.secrets.<name>.restartUnits. In directory-fanout mode every
+          leaf carries the same list, so a change to any leaf restarts them.
+        '';
+      };
+
+      reloadUnits = lib.mkOption {
+        type = listOf str;
+        default = [ ];
+        example = [ "nginx.service" ];
+        description = ''
+          Units to reload (rather than restart) when this entry's decrypted content changes,
+          passed straight through to sops-nix's own sops.secrets.<name>.reloadUnits. In
+          directory-fanout mode every leaf carries the same list.
+        '';
+      };
+
       # -- read-only, computed --
       path = lib.mkOption {
         type = str;

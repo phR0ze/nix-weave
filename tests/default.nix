@@ -10,7 +10,7 @@
 pkgs.testers.runNixOSTest {
   name = "nix-weave";
 
-  nodes.machine = { config, pkgs, ... }: {
+  nodes.machine = { config, lib, pkgs, ... }: {
     imports = [ nix-weave ];
 
     sops.age.keyFile = "/etc/nix-weave-test-key.txt";
@@ -106,6 +106,40 @@ pkgs.testers.runNixOSTest {
         EnvironmentFile = config.secret.templates."cloudflare-env".path;
         ExecStart = "${pkgs.bash}/bin/bash -c 'echo \"$CF_ZONE\" > /run/cloudflare-env-check-zone'";
       };
+    };
+
+    # -- restartUnits/reloadUnits: a secret whose content changes between generations must
+    # restart (and separately, reload) the units that consume it. The `rotated` specialisation
+    # below points the same entry at a different fixture key, so switching to it is a real
+    # content change rather than a no-op re-activation --
+    secret.files."rotating-secret" = {
+      sopsFile = ./fixtures/secrets.enc.yaml;
+      key = "rotating/value";
+      restartUnits = [ "restart-probe.service" ];
+      reloadUnits = [ "reload-probe.service" ];
+    };
+
+    systemd.services.restart-probe = {
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.bash}/bin/bash -c 'echo started >> /run/restart-probe-starts'";
+      };
+    };
+
+    systemd.services.reload-probe = {
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.bash}/bin/bash -c 'echo started >> /run/reload-probe-starts'";
+        ExecReload = "${pkgs.bash}/bin/bash -c 'echo reloaded >> /run/reload-probe-reloads'";
+      };
+    };
+
+    specialisation.rotated.configuration = {
+      secret.files."rotating-secret".key = lib.mkForce "rotating/value2";
     };
 
     # -- already-declared plain group for secret.users's extraGroups below --
@@ -225,6 +259,24 @@ pkgs.testers.runNixOSTest {
         )
         machine.succeed("stat -c%U:%G:%a /home/secrethashsvc/.ssh/authorized_keys | grep -qx 'secrethashsvc:secrethashgrp:600'")
         machine.succeed("stat -c%U:%G:%a /home/secrethashsvc/.ssh | grep -qx 'secrethashsvc:secrethashgrp:700'")
+
+    with subtest("restartUnits/reloadUnits fire only when the decrypted content actually changes"):
+        machine.wait_for_unit("restart-probe.service")
+        machine.wait_for_unit("reload-probe.service")
+        machine.succeed("test \"$(cat /run/secrets/rotating-secret)\" = 'test-rotating-value-1'")
+        machine.succeed("test \"$(wc -l < /run/restart-probe-starts)\" = 1")
+        machine.succeed("test ! -e /run/reload-probe-reloads")
+
+        # Re-activating the same generation leaves the secret byte-identical: nothing to do
+        machine.succeed("/run/current-system/bin/switch-to-configuration test")
+        machine.succeed("test \"$(wc -l < /run/restart-probe-starts)\" = 1")
+        machine.succeed("test ! -e /run/reload-probe-reloads")
+
+        # The specialisation reads a different fixture key, so the content really changes
+        machine.succeed("/run/current-system/specialisation/rotated/bin/switch-to-configuration test")
+        machine.succeed("test \"$(cat /run/secrets/rotating-secret)\" = 'test-rotating-value-2'")
+        machine.succeed("test \"$(wc -l < /run/restart-probe-starts)\" = 2")
+        machine.succeed("test \"$(wc -l < /run/reload-probe-reloads)\" = 1")
 
     with subtest("re-running activation is idempotent"):
         machine.succeed("/run/current-system/activate")

@@ -32,6 +32,7 @@ let
         owner = ownerStr entry.user;
         group = ownerStr entry.group;
         mode = entry.filemode;
+        inherit (entry) restartUnits reloadUnits;
         # Lazily coerced (not `optionalAttrs (... != null)`) so building the sops.templates
         # attrset never forces `content` -- doing so would recurse, since `content` may
         # interpolate config.sops.placeholder, which sops-nix itself only makes available once

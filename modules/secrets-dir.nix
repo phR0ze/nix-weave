@@ -41,6 +41,8 @@ let
           owner = entry.user;
           group = entry.group;
           mode = entry.filemode;
+          # Every leaf carries the entry's list, so a change to any one of them triggers it
+          inherit (entry) restartUnits reloadUnits;
         } // lib.optionalAttrs (!entry._usesDefaultSopsPath) {
           path = "${entry.path}/${relpath entry key}";
         };

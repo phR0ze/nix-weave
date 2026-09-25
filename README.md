@@ -24,6 +24,7 @@ copy/link installation is handled by a small activation script.
     - [Encrypted directory](#encrypted-directory)
   - [Templated files](#templated-files)
   - [User created from a secret](#user-created-from-a-secret)
+  - [Restarting units on change](#restarting-units-on-change)
 - [Running the examples](#running-the-examples)
 - [Test suite](#test-suite)
 - [Backlog](#backlog)
@@ -366,6 +367,36 @@ secret.users."svc-account" = {
   extraGroups = [ "shared" ];
 };
 ```
+
+#### Restarting units on change
+`secret.files` and `secret.templates` both take `restartUnits`/`reloadUnits`, passed straight
+through to sops-nix's own `sops.secrets.<name>.restartUnits`/`reloadUnits`. Use them for anything
+that reads a secret once at startup -- rotating the secret is otherwise invisible to an
+already-running service:
+
+```nix
+secret.files."nix-cache/secretKey" = {
+  sopsFile = ./private.enc.pem;
+  format = "binary";
+  restartUnits = [ "harmonia.service" ];
+};
+
+secret.templates."cloudflare-env" = {
+  path = "/run/caddy/cloudflare.env";
+  content = "CF_API_TOKEN=${config.secret.ref."caddy/cloudflareApiToken"}";
+  reloadUnits = [ "caddy.service" ];   # caddy can reload in place, no restart needed
+};
+```
+
+sops-nix compares each decrypted secret against the previous generation's, so units fire only on a
+real content change -- re-activating an unchanged generation restarts nothing. In directory-fanout
+mode (`prefix` set) every leaf inherits the entry's lists, so a change to any leaf triggers them.
+
+`reloadUnits` needs the unit to actually implement `ExecReload`; a unit without it is a no-op, not
+a fallback to restart. These are the only two install functions that support this -- the plaintext
+`files.*` engines install via nix-weave's own activation script rather than sops-nix, so they have
+no equivalent (put the content in the store and use `systemd.services.<name>.restartTriggers`
+instead), and `secret.users` reconciles accounts rather than files.
 
 ## Running the examples
 See `examples/` for complete, evaluable configuration snippets. `examples/secrets.enc.yaml`

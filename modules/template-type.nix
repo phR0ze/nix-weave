@@ -76,6 +76,26 @@ with lib.types; attrsOf (submodule (
         '';
       };
 
+      restartUnits = lib.mkOption {
+        type = listOf str;
+        default = [ ];
+        example = [ "caddy.service" ];
+        description = ''
+          Units to restart when the rendered content changes, passed straight through to
+          sops-nix's own sops.templates.<name>.restartUnits.
+        '';
+      };
+
+      reloadUnits = lib.mkOption {
+        type = listOf str;
+        default = [ ];
+        example = [ "nginx.service" ];
+        description = ''
+          Units to reload (rather than restart) when the rendered content changes, passed
+          straight through to sops-nix's own sops.templates.<name>.reloadUnits.
+        '';
+      };
+
       secrets = lib.mkOption {
         type = attrsOf attrs;
         default = { };
