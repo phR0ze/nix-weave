@@ -176,7 +176,10 @@ link() {
     chown -h "$_user":"$_group" "$_target"
   elif [[ "$(realpath "$_target")" != "$_src" ]]; then
     log " updating: $_target -> $_inter -> $_src"
-    rm -f "$_target"
+    # $_target may be a real directory rather than a stale symlink/file - e.g. an app that has
+    # already run once and populated its config dir before this link was ever managed. Plain
+    # `rm -f` refuses to remove a directory ("Is a directory"), so use -r to cover both cases.
+    rm -rf "$_target"
     ln -sf "$_inter" "$_target"
     chown -h "$_user":"$_group" "$_target"
   fi
