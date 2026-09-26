@@ -91,6 +91,7 @@ let
       passwordFile
       passwordHashFile
       authorizedKeysFile
+      (if entry.gid != null then toString entry.gid else "")
     ];
 
   createUserScript = pkgs.writeShellScript "nix-weave-create-user" ''
@@ -122,7 +123,7 @@ let
     create_user() {
       local user_file="$1" group_file="$2" is_normal="$3" uid="$4" \
             shell="$5" home="$6" home_mode="$7" extra_groups="$8" password_file="$9" \
-            password_hash_file="''${10}" authorized_keys_file="''${11}"
+            password_hash_file="''${10}" authorized_keys_file="''${11}" gid="''${12}"
       local user group
 
       user="$(cat "$user_file")"
@@ -131,6 +132,7 @@ let
       if ! getent group "$group" >/dev/null; then
         local group_args=()
         [[ "$is_normal" == false ]] && group_args+=(--system)
+        [[ -n "$gid" ]] && group_args+=(-g "$gid")
         groupadd "''${group_args[@]}" "$group"
       fi
 

@@ -68,6 +68,12 @@ with lib.types; attrsOf (submodule (
         description = "Fixed uid, like users.users.<name>.uid. Omit to let useradd allocate one.";
       };
 
+      gid = lib.mkOption {
+        type = nullOr int;
+        default = null;
+        description = "Fixed gid for the primary group, like users.groups.<name>.gid. Omit to let groupadd allocate one.";
+      };
+
       shell = lib.mkOption {
         type = nullOr str;
         default = null;
